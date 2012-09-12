@@ -1,3 +1,4 @@
+#if 0
 #include <scsi/scsi_tgt.h>
 
 #ifdef CONFIG_SCSI_SRP_TGT_ATTRS
@@ -22,4 +23,5 @@ static inline int srp_tgt_it_nexus_destroy(struct Scsi_Host *shost, u64 itn_id)
 {
 	return 0;
 }
+#endif
 #endif

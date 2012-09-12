@@ -107,4 +107,9 @@ static inline int srp_chkready(struct srp_rport *rport)
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+extern struct workqueue_struct *srp_wq;
+#define system_long_wq srp_wq
+#endif
+
 #endif

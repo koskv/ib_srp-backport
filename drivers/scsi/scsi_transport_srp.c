@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
+
+#include "../../include/linux/backport.h"
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/jiffies.h>
@@ -31,9 +33,14 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_transport.h>
-#include <scsi/scsi_transport_srp.h>
+#include "../../include/scsi/scsi_transport_srp.h"
 #include "scsi_priv.h"
 #include "scsi_transport_srp_internal.h"
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+struct workqueue_struct *srp_wq;
+EXPORT_SYMBOL(srp_wq);
+#endif
 
 struct srp_host_attrs {
 	atomic_t next_port_id;
@@ -383,7 +390,10 @@ static int scsi_request_fn_active(struct Scsi_Host *shost)
 		q = sdev->request_queue;
 
 		spin_lock_irq(q->queue_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+		/* See also commit 24faf6f6 */
 		request_fn_active += q->request_fn_active;
+#endif
 		spin_unlock_irq(q->queue_lock);
 	}
 
@@ -724,6 +734,7 @@ struct srp_rport *srp_rport_add(struct Scsi_Host *shost,
 		return ERR_PTR(ret);
 	}
 
+#if 0
 	if (shost->active_mode & MODE_TARGET &&
 	    ids->roles == SRP_RPORT_ROLE_INITIATOR) {
 		ret = srp_tgt_it_nexus_create(shost, (unsigned long)rport,
@@ -735,6 +746,7 @@ struct srp_rport *srp_rport_add(struct Scsi_Host *shost,
 			return ERR_PTR(ret);
 		}
 	}
+#endif
 
 	transport_add_device(&rport->dev);
 	transport_configure_device(&rport->dev);
@@ -752,11 +764,13 @@ EXPORT_SYMBOL_GPL(srp_rport_add);
 void srp_rport_del(struct srp_rport *rport)
 {
 	struct device *dev = &rport->dev;
+#if 0
 	struct Scsi_Host *shost = dev_to_shost(dev->parent);
 
 	if (shost->active_mode & MODE_TARGET &&
 	    rport->roles == SRP_RPORT_ROLE_INITIATOR)
 		srp_tgt_it_nexus_destroy(shost, (unsigned long)rport);
+#endif
 
 	transport_remove_device(dev);
 	device_del(dev);
@@ -885,8 +899,21 @@ static __init int srp_transport_init(void)
 	ret = transport_class_register(&srp_rport_class);
 	if (ret)
 		goto unregister_host_class;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+	srp_wq = create_workqueue("srp");
+	if (IS_ERR(srp_wq)) {
+		ret = PTR_ERR(srp_wq);
+		srp_wq = NULL;
+		goto unregister_rport_class;
+	}
+#endif
 
 	return 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+unregister_rport_class:
+	transport_class_unregister(&srp_host_class);
+#endif
 unregister_host_class:
 	transport_class_unregister(&srp_host_class);
 	return ret;
@@ -894,6 +921,10 @@ unregister_host_class:
 
 static void __exit srp_transport_exit(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+	destroy_workqueue(srp_wq);
+	srp_wq = NULL;
+#endif
 	transport_class_unregister(&srp_host_class);
 	transport_class_unregister(&srp_rport_class);
 }

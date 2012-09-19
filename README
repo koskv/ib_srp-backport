@@ -1,0 +1,187 @@
+ib_srp-backport README
+======================
+
+Introduction
+------------
+
+This is a backport of the Linux kernel 3.11 InfiniBand SRP initiator with
+the following additional features:
+- Faster failover.
+- Configurable dev_loss_tmo, fast_io_fail_tmo and reconnect_delay parameters.
+- Support for initiator-side mirroring (by setting dev_loss_tmo to "off").
+- Support for Mellanox Connect-IB HCA's (via fast registration work requests,
+  a.k.a. FRWR).
+- Configurable queue size allowing higher performance against hard disk arrays.
+- Improved small block (IOPS) performance.
+- Support for lockless SCSI command dispatching on RHEL 6.2 and later.
+- Builds against any kernel in the range 2.6.32..3.6.
+- RHEL 5.9, RHEL 6.x, SLES 11, Ubuntu 10.04 LTS, Ubuntu 12.04 LTS, OL 6.x,
+  OL UEK 6.x CentOS 6.x and SL 6.x systems are supported.
+
+Installation
+------------
+
+After having installed the InfiniBand kernel drivers from your Linux
+distributor or from an OFED distribution, the ib_srp driver itself can be
+built and installed as follows on an RPM-based distribution:
+
+type yum >/dev/null 2>&1 && yum install kernel-devel make gcc rpm-build
+type zypper >/dev/null 2>&1 && zypper install kernel-default-devel make gcc rpm
+make rpm
+rpm -U rpmbuilddir/RPMS/*/*.rpm
+
+For non-RPM based distributions such as Ubuntu, the procedure is as follows:
+
+modprobe -r ib_srp
+find /lib/modules/$(uname -r) \
+  -name ib_srp.ko -o -name scsi_transport_srp.ko | xargs rm -f
+# When using OFED, edit the kernel Makefile with sed as follows:
+sed -i.orig \
+    -e 's/^\(LINUXINCLUDE[[:blank:]]\+:=[[:blank:]]\+\)/\1$(PRE_CFLAGS) /' \
+    /lib/modules/$(uname -r)/build/Makefile
+diff -u /lib/modules/$(uname -r)/build/Makefile{.orig,}
+make -s
+make -s install
+modprobe ib_srp
+
+Please note that just like any other out-of-tree InfiniBand kernel driver,
+this kernel driver has to be rebuilt and reinstalled after every kernel
+update and after every OFED update.
+
+Uninstallation
+--------------
+
+After having installed the RPM, reverting back to the SRP initiator driver
+included in your Linux distribution is possible e.g. as follows:
+
+rpm -e ib_srp-backport-$(uname -r)
+k="$(rpm -qf /boot/vmlinuz-$(uname -r))"
+rpm -e --justdb --nodeps "$k" &&
+if type yum >/dev/null 2>&1; then
+    yum install -y "$k"
+else
+    zypper install -y "$k"
+fi
+unset k
+
+Testing
+-------
+
+This version of ib_srp has been tested against the following kernels:
+2.6.32-131.21.1.el6.x86_64 (RHEL 6.0)
+2.6.32-220.23.1.el6.x86_64 (RHEL 6.1)
+2.6.32-279.5.2.el6.x86_64 (RHEL 6.2)
+2.6.32-71.29.1.el6.x86_64 (RHEL 6.3)
+2.6.32-42-server (Ubuntu 10.04.4 LTS + OFED 1.5.4.1)
+3.8.12 (kernel.org)
+3.10.7 (kernel.org)
+
+If you are using another kernel or if you want to make sure that this version
+of the ib_srp driver has been built and installed correctly you can run
+e.g. the tests below. The srptools, sg3_utils and fio software packages must
+be installed on the SRP initiator system before the tests below can be run.
+
+1. Verify that SRP login works fine: echoing a target specification string
+   into the sysfs "add_target" attribute must result in a successful login.
+
+   # dmesg -c >/dev/null
+   # ibsrpdm -c |
+       head -n 1 > /sys/class/infiniband_srp/srp-${hca}-${port}/add_target
+   # dmesg -c | grep 'ib_srp: new target'
+   scsi host8: ib_srp: new target: id_ext 0002c9030005f34e ioc_guid 0002c9030005f34e pkey ffff service_id 0002c9030005f34e dgid fe80:0000:0000:0000:0002:c903:0005:f34f
+
+2. Verify that the RESET task management function is processed properly.
+   # sg_reset -d ${srp_ini_dev}
+   sg_reset: starting device reset
+   sg_reset: completed device reset
+
+   Check that the above command makes the target log a message that indicates
+   that the corresponding LUN has been reset, e.g. "Resetting LUN 0".
+
+3. Run a data integrity test, e.g. as follows:
+
+   mkfs.ext4 -O ^has_journal ${srp_ini_dev}
+   umount /mnt
+   mount ${srp_ini_dev} /mnt
+   fio --verify=md5 -rw=randwrite --size=10m --bs=4k --loops=10000 \
+     --runtime=600 --group_reporting --sync=1 --direct=1 --ioengine=psync \
+     --directory=/mnt --name=test --thread --numjobs=64
+
+4. Verify whether target logout causes the initiator to remove the
+   corresponding SCSI host. If the SRP target you are using supports disabling
+   and enabling InfiniBand SRP target ports you can use that facility. If not
+   you can also use the GUI of your SRP target to restart the target
+   system. That should cause a message similar to the following to appear in
+   the initiator system log:
+
+   scsi host8: ib_srp: DREQ received - connection closed
+
+5. Verify that triggering SRP logout from the initiator side works fine:
+
+   # dmesg -c >/dev/null
+   # echo 1 > /sys/class/srp_remote_ports/port-${scsi_host}\:1/delete
+   # dmesg -c | grep ib_srp
+   scsi host10: ib_srp: connection closed
+
+6. Verify that modifying dev_loss_tmo and fast_io_fail_tmo works fine:
+
+   # echo 15 > /sys/class/srp_remote_ports/port-${scsi_host}\:1/dev_loss_tmo
+   # echo 10 > /sys/class/srp_remote_ports/port-${scsi_host}\:1/fast_io_fail_tmo
+   # grep . /sys/class/srp_remote_ports/port-6\:1/*tmo
+   /sys/class/srp_remote_ports/port-6:1/dev_loss_tmo:15
+   /sys/class/srp_remote_ports/port-6:1/fast_io_fail_tmo:10
+
+7. Verify that the initiator closes the connection after an I/O failure
+   occurred:
+
+   /etc/init.d/opensmd stop
+   fio -rw=randread --bs=4k --loops=10000 --runtime=600 --direct=1 \
+     --ioengine=psync --name=srp --filename=/dev/${srp_ini_dev} &
+   ibportstate ${ib_port_lid} 1 reset
+
+   After about 30s messages similar to what's below should start appearing in
+   the kernel log:
+
+   scsi host13: SRP abort called
+   scsi host13: SRP reset_device called
+   scsi host13: ib_srp: SRP reset_host called
+   scsi host13: ib_srp: connection closed
+
+8. Verify that the initiator logs out after a reasonable time if an InfiniBand
+   cable is plugged.
+
+9. Start multipathd and verify that a dm device has been created on top of
+   the active SRP connections. Start a data integrity test on top of one of
+   the SRP dm devices and while that test is running repeatedly trigger SRP
+   logout and relogin:
+
+   for ((i=0;i<10000;i++)); do
+     echo $srp_login_string >/sys/class/infiniband_srp/srp-${hcaport}/add_target
+   done
+
+   Verify that the data integrity test keeps running and that it does not
+   report any data integrity issues.
+
+
+Performance Data
+----------------
+
+Initiator: Quad-core Intel i5-2400 @ 3.10 GHz
+Target: Core2Duo E8400 @ 3.00 GHz
+Single LUN; RAM disk as target (brd kernel module); single FDR IB link;
+NOOP scheduler; block layer rq_affinity = 2; ib_srp cmd_sg_entries=255;
+runlevel 3; dynamic C-state and P-state transitions disabled.
+
+                                       IOPS         IOPS
+Initiator kernel   SRP driver          @ 4 KB    @ 512 bytes
+...............    ..........          .....     ...........
+OL 6.3, UEK (2.6.39-400.109.5.el6uek.x86_64)
+                   OL 6.3              290 K        285 K
+OL 6.3, UEK (2.6.39-400.109.5.el6uek.x86_64)
+                   ib_srp-backport     290 K        290 K
+OL 6.3, Red Hat compatible kernel (2.6.32-279.el6.x86_64)
+                   OL 6.3              340 K        500 K
+OL 6.3, Red Hat compatible kernel (2.6.32-279.el6.x86_64)
+                   ib_srp-backport     340 K        500 K
+kernel.org 3.10.7  upstream ib_srp     340 K        560 K
+kernel.org 3.10.7  ib_srp-backport     340 K        560 K

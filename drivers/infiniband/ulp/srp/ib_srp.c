@@ -688,14 +688,26 @@ static void srp_free_req(struct srp_target_port *target,
 	spin_unlock_irqrestore(&target->lock, flags);
 }
 
-static void srp_reset_req(struct srp_target_port *target, struct srp_request *req)
+static void srp_finish_req(struct srp_target_port *target,
+			   struct srp_request *req, int result)
 {
 	struct scsi_cmnd *scmnd = srp_claim_req(target, req, NULL);
 
 	if (scmnd) {
 		srp_free_req(target, req, scmnd, 0);
-		scmnd->result = DID_RESET << 16;
+		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
+	}
+}
+
+static void srp_terminate_io(struct srp_rport *rport)
+{
+	struct srp_target_port *target = rport->lld_data;
+	int i;
+
+	for (i = 0; i < SRP_CMD_SQ_SIZE; ++i) {
+		struct srp_request *req = &target->req_ring[i];
+		srp_finish_req(target, req, DID_TRANSPORT_FAILFAST << 16);
 	}
 }
 
@@ -725,8 +737,7 @@ static int srp_reconnect_target(struct srp_target_port *target)
 
 	for (i = 0; i < SRP_CMD_SQ_SIZE; ++i) {
 		struct srp_request *req = &target->req_ring[i];
-		if (req->scmnd)
-			srp_reset_req(target, req);
+		srp_finish_req(target, req, DID_RESET << 16);
 	}
 
 	INIT_LIST_HEAD(&target->free_tx);
@@ -1784,7 +1795,7 @@ static int srp_reset_device(struct scsi_cmnd *scmnd)
 	for (i = 0; i < SRP_CMD_SQ_SIZE; ++i) {
 		struct srp_request *req = &target->req_ring[i];
 		if (req->scmnd && req->scmnd->device == scmnd->device)
-			srp_reset_req(target, req);
+			srp_finish_req(target, req, DID_RESET << 16);
 	}
 
 	return SUCCESS;
@@ -2616,6 +2627,7 @@ static void srp_remove_one(struct ib_device *device)
 
 static struct srp_function_template ib_srp_transport_functions = {
 	.rport_delete		 = srp_rport_delete,
+	.terminate_rport_io	 = srp_terminate_io,
 };
 
 static int __init srp_init_module(void)

@@ -1655,30 +1655,42 @@ static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
 static void srp_recv_completion(struct ib_cq *cq, void *target_ptr)
 {
 	struct srp_target_port *target = target_ptr;
-	struct ib_wc wc;
+	struct ib_wc* const wc = target->recv_wc;
+	int i, n;
 
-	ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
-	while (ib_poll_cq(cq, 1, &wc) > 0) {
-		if (likely(wc.status == IB_WC_SUCCESS)) {
-			srp_handle_recv(target, &wc);
-		} else {
-			srp_handle_qp_err(wc.wr_id, wc.status, false, target);
+	do {
+		while ((n = ib_poll_cq(cq, ARRAY_SIZE(target->recv_wc), wc)) >
+		       0) {
+			for (i = 0; i < n; ++i) {
+				if (likely(wc[i].status == IB_WC_SUCCESS)) {
+					srp_handle_recv(target, &wc[i]);
+				} else {
+					srp_handle_qp_err(wc[i].wr_id,
+							  wc[i].status,
+							  false, target);
+				}
+			}
 		}
-	}
+	} while (ib_req_notify_cq(cq, IB_CQ_NEXT_COMP |
+				      IB_CQ_REPORT_MISSED_EVENTS) > 0);
 }
 
 static void srp_send_completion(struct ib_cq *cq, void *target_ptr)
 {
 	struct srp_target_port *target = target_ptr;
-	struct ib_wc wc;
+	struct ib_wc *const wc = target->send_wc;
 	struct srp_iu *iu;
+	int i, n;
 
-	while (ib_poll_cq(cq, 1, &wc) > 0) {
-		if (likely(wc.status == IB_WC_SUCCESS)) {
-			iu = (struct srp_iu *) (uintptr_t) wc.wr_id;
-			list_add(&iu->list, &target->free_tx);
-		} else {
-			srp_handle_qp_err(wc.wr_id, wc.status, true, target);
+	while ((n = ib_poll_cq(cq, ARRAY_SIZE(target->send_wc), wc)) > 0) {
+		for (i = 0; i < n; ++i) {
+			if (likely(wc[i].status == IB_WC_SUCCESS)) {
+				iu = (struct srp_iu *) (uintptr_t) wc[i].wr_id;
+				list_add(&iu->list, &target->free_tx);
+			} else {
+				srp_handle_qp_err(wc[i].wr_id, wc[i].status,
+						  true, target);
+			}
 		}
 	}
 }

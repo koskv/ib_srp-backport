@@ -153,6 +153,8 @@ struct srp_target_port {
 	unsigned int		indirect_size;
 	bool			allow_ext_sg;
 	bool			use_fast_reg;
+	struct ib_wc		recv_wc[16];
+	struct ib_wc		send_wc[16];
 
 	/* Everything above this point is used in the hot path of
 	 * command processing. Try to keep them packed into cachelines.

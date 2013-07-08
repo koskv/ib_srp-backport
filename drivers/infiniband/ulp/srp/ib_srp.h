@@ -73,6 +73,10 @@ enum {
 
 	SRP_MAP_ALLOW_FMR	= 0,
 	SRP_MAP_NO_FMR		= 1,
+
+	/* For fast registration */
+	SRP_MIN_PAGE_SHIFT	= 9,
+	SRP_MIN_PAGE_SIZE	= 1 << SRP_MIN_PAGE_SHIFT,
 };
 
 enum srp_target_state {
@@ -92,9 +96,11 @@ struct srp_device {
 	struct ib_pd	       *pd;
 	struct ib_mr	       *mr;
 	struct ib_fmr_pool     *fmr_pool;
+	u64			page_size_cap;
 	u64			fmr_page_mask;
 	int			fmr_page_size;
 	int			fmr_max_size;
+	bool			use_fast_reg;
 };
 
 struct srp_host {
@@ -120,6 +126,11 @@ struct srp_request {
 			u64		       *map_page;
 			short			nfmr;
 		} fmr;
+		struct {
+			struct ib_mr			*mr;
+			struct ib_fast_reg_page_list	*frpl;
+			bool				rkey_valid;
+		} frwr;
 	};
 };
 
@@ -141,6 +152,7 @@ struct srp_target_port {
 	unsigned int		cmd_sg_cnt;
 	unsigned int		indirect_size;
 	bool			allow_ext_sg;
+	bool			use_fast_reg;
 
 	/* Everything above this point is used in the hot path of
 	 * command processing. Try to keep them packed into cachelines.

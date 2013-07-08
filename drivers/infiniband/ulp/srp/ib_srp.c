@@ -321,7 +321,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 	init_attr->cap.max_recv_wr     = target->queue_size;
 	init_attr->cap.max_recv_sge    = 1;
 	init_attr->cap.max_send_sge    = 1;
-	init_attr->sq_sig_type         = IB_SIGNAL_ALL_WR;
+	init_attr->sq_sig_type         = IB_SIGNAL_REQ_WR;
 	init_attr->qp_type             = IB_QPT_RC;
 	init_attr->send_cq             = send_cq;
 	init_attr->recv_cq             = recv_cq;
@@ -581,8 +581,15 @@ static void srp_free_req_data(struct srp_target_port *target)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		req = &target->req_ring[i];
-		kfree(req->fmr.fmr_list);
-		kfree(req->fmr.map_page);
+		if (target->use_fast_reg) {
+			if (req->frwr.frpl)
+				ib_free_fast_reg_page_list(req->frwr.frpl);
+			if (req->frwr.mr)
+				ib_dereg_mr(req->frwr.mr);
+		} else {
+			kfree(req->fmr.fmr_list);
+			kfree(req->fmr.map_page);
+		}
 		if (req->indirect_dma_addr) {
 			ib_dma_unmap_single(ibdev, req->indirect_dma_addr,
 					    target->indirect_size,
@@ -601,6 +608,7 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 	struct ib_device *ibdev = srp_dev->dev;
 	struct srp_request *req;
 	dma_addr_t dma_addr;
+	const int max_page_list_len = target->sg_tablesize;
 	int i, ret = -ENOMEM;
 
 	INIT_LIST_HEAD(&target->free_reqs);
@@ -612,13 +620,33 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		req = &target->req_ring[i];
-		req->fmr.fmr_list = kmalloc(target->cmd_sg_cnt * sizeof(void *),
-					    GFP_KERNEL);
-		req->fmr.map_page = kmalloc(SRP_FMR_SIZE * sizeof (void *),
-					    GFP_KERNEL);
+		if (target->use_fast_reg) {
+			req->frwr.mr = ib_alloc_fast_reg_mr(srp_dev->pd,
+							    max_page_list_len);
+			if (IS_ERR(req->frwr.mr)) {
+				ret = PTR_ERR(req->frwr.mr);
+				req->frwr.mr = NULL;
+				goto out;
+			}
+			req->frwr.frpl = ib_alloc_fast_reg_page_list(ibdev,
+							    max_page_list_len);
+			if (IS_ERR(req->frwr.frpl)) {
+				ret = PTR_ERR(req->frwr.frpl);
+				req->frwr.frpl = NULL;
+				goto out;
+			}
+		} else {
+			req->fmr.fmr_list = kmalloc(target->cmd_sg_cnt *
+						sizeof(void *), GFP_KERNEL);
+			if (!req->fmr.fmr_list)
+				goto out;
+			req->fmr.map_page = kmalloc(SRP_FMR_SIZE *
+						    sizeof(void *), GFP_KERNEL);
+			if (!req->fmr.map_page)
+				goto out;
+		}
 		req->indirect_desc = kmalloc(target->indirect_size, GFP_KERNEL);
-		if (!req->fmr.fmr_list || !req->fmr.map_page ||
-		    !req->indirect_desc)
+		if (!req->indirect_desc)
 			goto out;
 
 		dma_addr = ib_dma_map_single(ibdev, req->indirect_desc,
@@ -751,6 +779,21 @@ static int srp_connect_target(struct srp_target_port *target)
 	}
 }
 
+static int srp_inv_rkey(struct srp_target_port *target, struct srp_request *req)
+{
+	struct ib_send_wr *bad_wr;
+	struct ib_send_wr wr = {
+		.opcode		    = IB_WR_LOCAL_INV,
+		.wr_id		    = (uintptr_t)req | 1,
+		.next		    = NULL,
+		.num_sge	    = 0,
+		.send_flags	    = 0,
+		.ex.invalidate_rkey = req->frwr.mr->rkey,
+	};
+
+	return ib_post_send(target->qp, &wr, &bad_wr);
+}
+
 static void srp_unmap_data(struct scsi_cmnd *scmnd,
 			   struct srp_target_port *target,
 			   struct srp_request *req)
@@ -763,9 +806,14 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 	     scmnd->sc_data_direction != DMA_FROM_DEVICE))
 		return;
 
-	pfmr = req->fmr.fmr_list;
-	while (req->fmr.nfmr--)
-		ib_fmr_pool_unmap(*pfmr++);
+	if (target->use_fast_reg) {
+		if (req->frwr.rkey_valid)
+			srp_inv_rkey(target, req);
+	} else {
+		pfmr = req->fmr.fmr_list;
+		while (req->fmr.nfmr--)
+			ib_fmr_pool_unmap(*pfmr++);
+	}
 
 	ib_dma_unmap_sg(ibdev, scsi_sglist(scmnd), scsi_sg_count(scmnd),
 			scmnd->sc_data_direction);
@@ -1024,6 +1072,94 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 	return ret;
 }
 
+/*
+ * Notes:
+ * - Fast registration registers a memory range that consists either
+ *   of a contiguous range of virtual addresses or of a contiguous range of
+ *   physical addresses. Hence the loop for finding the smallest dma_len value.
+ *   This value is used to pretend to the HCA that the registered memory range
+ *   is a contiguous range of virtual addresses.
+ * - Individual elements of the scatterlist passed to this function should have
+ *   a minimum size of is 512 bytes (SRP_MIN_PAGE_SIZE).
+ */
+static int srp_map_frwr(struct srp_map_state *state,
+			struct srp_target_port *target, struct srp_request *req,
+			struct scatterlist *scat, int count)
+{
+	struct srp_device *dev = target->srp_host->srp_dev;
+	struct ib_device *ibdev = dev->dev;
+	struct scatterlist *sg;
+	struct ib_send_wr *bad_wr;
+	struct ib_send_wr wr;
+	u64 dma_addr, dma_len, data_len = 0;
+	u64 *page_list = req->frwr.frpl->page_list;
+	int page_shift;
+	u64 page_mask;
+	u32 rkey;
+	int i, j, k = 0;
+
+	rkey = ib_inc_rkey(req->frwr.mr->rkey);
+	ib_update_fast_reg_key(req->frwr.mr, rkey);
+
+	page_shift = PAGE_SHIFT;
+	for_each_sg(scat, sg, count, i) {
+		dma_len = ib_sg_dma_len(ibdev, sg);
+		data_len += dma_len;
+		if (i != 0 && sg->offset != 0)
+			page_shift = min(page_shift,
+					 ffs(sg->offset) - 1);
+		if (i != count - 1)
+			page_shift = min(page_shift, ffs(dma_len) - 1);
+	}
+
+	while (!(dev->page_size_cap & (1ULL << page_shift)) &&
+	       page_shift >= SRP_MIN_PAGE_SHIFT)
+		page_shift--;
+
+	if (WARN(page_shift < SRP_MIN_PAGE_SHIFT,
+		 "Invalid sg vector (page_shift = %d < %d)\n", page_shift,
+		 SRP_MIN_PAGE_SHIFT))
+		return -EINVAL;
+
+	page_mask = ~((1ULL << page_shift) - 1);
+
+	/*
+	 * To do: add bounce buffer support in case an sg vector exceeds
+	 * a single FRWR page list.
+	 */
+	for_each_sg(scat, sg, count, i) {
+		dma_addr = ib_sg_dma_address(ibdev, sg);
+		dma_len = ib_sg_dma_len(ibdev, sg);
+		for (j = 0; j < dma_len; j += 1 << page_shift) {
+			page_list[k++] = (dma_addr + j) & page_mask;
+			if (WARN_ONCE(k > target->sg_tablesize,
+				      "page_list_len %d > %d\n", k,
+				      target->sg_tablesize))
+				return -ENOMEM;
+		}
+	}
+
+	state->ndesc = 1;
+	state->total_len = data_len;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.opcode = IB_WR_FAST_REG_MR;
+	wr.wr_id = (uintptr_t)req;
+	wr.wr.fast_reg.iova_start = ib_sg_dma_address(ibdev, &scat[0]);
+	wr.wr.fast_reg.page_list = req->frwr.frpl;
+	wr.wr.fast_reg.page_list_len = k;
+	wr.wr.fast_reg.page_shift = page_shift;
+	wr.wr.fast_reg.length = data_len;
+	wr.wr.fast_reg.access_flags = (IB_ACCESS_LOCAL_WRITE |
+				       IB_ACCESS_REMOTE_READ |
+				       IB_ACCESS_REMOTE_WRITE);
+	wr.wr.fast_reg.rkey = req->frwr.mr->lkey;
+
+	req->frwr.rkey_valid = true;
+
+	return ib_post_send(target->qp, &wr, &bad_wr);
+}
+
 static void srp_map_fmr(struct srp_map_state *state,
 			struct srp_target_port *target, struct srp_request *req,
 			struct scatterlist *scat, int count)
@@ -1116,13 +1252,16 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 		buf->key = cpu_to_be32(target->rkey);
 		buf->len = cpu_to_be32(ib_sg_dma_len(ibdev, scat));
 
-		req->fmr.nfmr = 0;
+		if (target->use_fast_reg)
+			req->frwr.rkey_valid = false;
+		else
+			req->fmr.nfmr = 0;
 		goto map_complete;
 	}
 
-	/* We have more than one scatter/gather entry, so build our indirect
-	 * descriptor table, trying to merge as many entries with FMR as we
-	 * can.
+	/*
+	 * We have more than one scatter/gather entry, so build our indirect
+	 * descriptor table, trying to merge as many entries as we can.
 	 */
 	indirect_hdr = (void *) cmd->add_data;
 
@@ -1130,7 +1269,15 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 				   target->indirect_size, DMA_TO_DEVICE);
 
 	memset(&state, 0, sizeof(state));
-	srp_map_fmr(&state, target, req, scat, count);
+	if (target->use_fast_reg) {
+		int res;
+
+		res = srp_map_frwr(&state, target, req, scat, count);
+		if (res < 0)
+			return res;
+	} else {
+		srp_map_fmr(&state, target, req, scat, count);
+	}
 
 	/* We've mapped the request, now pull as much of the indirect
 	 * descriptor table as we can into the command buffer. If this
@@ -1139,12 +1286,20 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 	 * give us more S/G entries than we allow.
 	 */
 	if (state.ndesc == 1) {
-		/* FMR mapping was able to collapse this to one entry,
+		/*
+		 * Memory registration collapsed the sg-list into one entry,
 		 * so use a direct descriptor.
 		 */
 		struct srp_direct_buf *buf = (void *) cmd->add_data;
 
-		*buf = req->indirect_desc[0];
+		if (target->use_fast_reg) {
+			buf->va  = cpu_to_be64(ib_sg_dma_address(ibdev,
+								 &scat[0]));
+			buf->key = cpu_to_be32(req->frwr.mr->rkey);
+			buf->len = cpu_to_be32(state.total_len);
+		} else {
+			*buf = req->indirect_desc[0];
+		}
 		goto map_complete;
 	}
 
@@ -1461,14 +1616,37 @@ static void srp_tl_err_work(struct work_struct *work)
 		srp_start_tl_fail_timers(target->rport);
 }
 
-static void srp_handle_qp_err(enum ib_wc_status wc_status, bool send_err,
-			      struct srp_target_port *target)
+static int srp_req_idx(struct srp_target_port *target, struct srp_request *req)
 {
-	if (target->connected && !target->qp_in_error) {
+	int i = req - target->req_ring;
+
+	return 0 <= i && i < target->req_ring_size &&
+		req == &target->req_ring[i] ? i : -1;
+}
+
+static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
+			      bool send_err, struct srp_target_port *target)
+{
+	int i = srp_req_idx(target, (void *)(uintptr_t)(wr_id & ~1ULL));
+
+	if (wr_id & 1) {
 		shost_printk(KERN_ERR, target->scsi_host,
-			     PFX "failed %s status %d\n",
-			     send_err ? "send" : "receive",
-			     wc_status);
+			     "LOCAL_INV for req [%d] failed with status %d\n",
+			     i, wc_status);
+		return;
+	}
+
+	if (target->connected && !target->qp_in_error) {
+		if (i >= 0) {
+			shost_printk(KERN_ERR, target->scsi_host,
+				     "FAST_REG_MR [%d] failed status %d\n", i,
+				     wc_status);
+		} else {
+			shost_printk(KERN_ERR, target->scsi_host,
+				     PFX "failed %s status %d for iu %p\n",
+				     send_err ? "send" : "receive",
+				     wc_status, (void *)(uintptr_t)wr_id);
+		}
 		queue_work(system_long_wq, &target->tl_err_work);
 	}
 	target->qp_in_error = true;
@@ -1484,7 +1662,7 @@ static void srp_recv_completion(struct ib_cq *cq, void *target_ptr)
 		if (likely(wc.status == IB_WC_SUCCESS)) {
 			srp_handle_recv(target, &wc);
 		} else {
-			srp_handle_qp_err(wc.status, false, target);
+			srp_handle_qp_err(wc.wr_id, wc.status, false, target);
 		}
 	}
 }
@@ -1500,7 +1678,7 @@ static void srp_send_completion(struct ib_cq *cq, void *target_ptr)
 			iu = (struct srp_iu *) (uintptr_t) wc.wr_id;
 			list_add(&iu->list, &target->free_tx);
 		} else {
-			srp_handle_qp_err(wc.status, true, target);
+			srp_handle_qp_err(wc.wr_id, wc.status, true, target);
 		}
 	}
 }
@@ -2090,6 +2268,14 @@ static ssize_t show_tl_retry_count(struct device *dev,
 	return sprintf(buf, "%d\n", target->tl_retry_count);
 }
 
+static ssize_t show_fast_reg(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct srp_target_port *target = host_to_target(class_to_shost(dev));
+
+	return sprintf(buf, "%d\n", target->use_fast_reg);
+}
+
 static ssize_t show_cmd_sg_entries(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -2118,6 +2304,7 @@ static DEVICE_ATTR(local_ib_port,   S_IRUGO, show_local_ib_port,   NULL);
 static DEVICE_ATTR(local_ib_device, S_IRUGO, show_local_ib_device, NULL);
 static DEVICE_ATTR(comp_vector,     S_IRUGO, show_comp_vector,     NULL);
 static DEVICE_ATTR(tl_retry_count,  S_IRUGO, show_tl_retry_count,  NULL);
+static DEVICE_ATTR(fast_reg,	    S_IRUGO, show_fast_reg,        NULL);
 static DEVICE_ATTR(cmd_sg_entries,  S_IRUGO, show_cmd_sg_entries,  NULL);
 static DEVICE_ATTR(allow_ext_sg,    S_IRUGO, show_allow_ext_sg,    NULL);
 
@@ -2134,6 +2321,7 @@ static struct device_attribute *srp_host_attrs[] = {
 	&dev_attr_local_ib_device,
 	&dev_attr_comp_vector,
 	&dev_attr_tl_retry_count,
+	&dev_attr_fast_reg,
 	&dev_attr_cmd_sg_entries,
 	&dev_attr_allow_ext_sg,
 	NULL
@@ -2261,6 +2449,7 @@ enum {
 	SRP_OPT_COMP_VECTOR	= 1 << 12,
 	SRP_OPT_TL_RETRY_COUNT	= 1 << 13,
 	SRP_OPT_CAN_QUEUE	= 1 << 14,
+	SRP_OPT_USE_FAST_REG	= 1 << 15,
 	SRP_OPT_ALL		= (SRP_OPT_ID_EXT	|
 				   SRP_OPT_IOC_GUID	|
 				   SRP_OPT_DGID		|
@@ -2284,6 +2473,7 @@ static const match_table_t srp_opt_tokens = {
 	{ SRP_OPT_COMP_VECTOR,		"comp_vector=%u"	},
 	{ SRP_OPT_TL_RETRY_COUNT,	"tl_retry_count=%u"	},
 	{ SRP_OPT_CAN_QUEUE,		"can_queue=%d"		},
+	{ SRP_OPT_USE_FAST_REG,		"use_fast_reg=%d"	},
 	{ SRP_OPT_ERR,			NULL 			}
 };
 
@@ -2468,6 +2658,15 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 			target->tl_retry_count = token;
 			break;
 
+		case SRP_OPT_USE_FAST_REG:
+			if (match_int(args, &token) || token < 0 || token > 1) {
+				pr_warn("bad use_fast_reg parameter '%s' (must be 0 or 1)\n",
+					p);
+				goto out;
+			}
+			target->use_fast_reg = token;
+			break;
+
 		default:
 			pr_warn("unknown parameter or missing value '%s' in target creation request\n",
 				p);
@@ -2504,6 +2703,7 @@ static ssize_t srp_create_target(struct device *dev,
 	struct Scsi_Host *target_host;
 	struct srp_target_port *target;
 	struct ib_device *ibdev = host->srp_dev->dev;
+	struct srp_device *srp_dev = ib_get_client_data(ibdev, &srp_client);
 	int ret;
 
 	target_host = scsi_host_alloc(&srp_template,
@@ -2529,6 +2729,7 @@ static ssize_t srp_create_target(struct device *dev,
 	target->allow_ext_sg	= allow_ext_sg;
 	target->tl_retry_count	= 7;
 	target->queue_size	= SRP_DEFAULT_QUEUE_SIZE;
+	target->use_fast_reg	= srp_dev->use_fast_reg;
 
 	ret = srp_parse_options(buf, target);
 	if (ret)
@@ -2697,6 +2898,24 @@ static void srp_add_one(struct ib_device *device)
 	srp_dev = kmalloc(sizeof *srp_dev, GFP_KERNEL);
 	if (!srp_dev)
 		goto free_attr;
+
+	if (device->alloc_fmr && device->dealloc_fmr && device->map_phys_fmr &&
+	    device->unmap_fmr) {
+		srp_dev->use_fast_reg = false;
+	} else if (dev_attr->device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS) {
+		if (dev_attr->page_size_cap & SRP_MIN_PAGE_SIZE) {
+			srp_dev->use_fast_reg = true;
+		} else {
+			dev_err(&device->dev, "page size %d is not supported\n",
+				SRP_MIN_PAGE_SIZE);
+			goto free_dev;
+		}
+	} else {
+		dev_err(&device->dev, "neither FMR nor FRWR is supported\n");
+		goto free_dev;
+	}
+
+	srp_dev->page_size_cap = dev_attr->page_size_cap;
 
 	/*
 	 * Use the smallest page size supported by the HCA, down to a

@@ -581,8 +581,8 @@ static void srp_free_req_data(struct srp_target_port *target)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		req = &target->req_ring[i];
-		kfree(req->fmr_list);
-		kfree(req->map_page);
+		kfree(req->fmr.fmr_list);
+		kfree(req->fmr.map_page);
 		if (req->indirect_dma_addr) {
 			ib_dma_unmap_single(ibdev, req->indirect_dma_addr,
 					    target->indirect_size,
@@ -612,12 +612,13 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		req = &target->req_ring[i];
-		req->fmr_list = kmalloc(target->cmd_sg_cnt * sizeof (void *),
-					GFP_KERNEL);
-		req->map_page = kmalloc(SRP_FMR_SIZE * sizeof (void *),
-					GFP_KERNEL);
+		req->fmr.fmr_list = kmalloc(target->cmd_sg_cnt * sizeof(void *),
+					    GFP_KERNEL);
+		req->fmr.map_page = kmalloc(SRP_FMR_SIZE * sizeof (void *),
+					    GFP_KERNEL);
 		req->indirect_desc = kmalloc(target->indirect_size, GFP_KERNEL);
-		if (!req->fmr_list || !req->map_page || !req->indirect_desc)
+		if (!req->fmr.fmr_list || !req->fmr.map_page ||
+		    !req->indirect_desc)
 			goto out;
 
 		dma_addr = ib_dma_map_single(ibdev, req->indirect_desc,
@@ -762,8 +763,8 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 	     scmnd->sc_data_direction != DMA_FROM_DEVICE))
 		return;
 
-	pfmr = req->fmr_list;
-	while (req->nfmr--)
+	pfmr = req->fmr.fmr_list;
+	while (req->fmr.nfmr--)
 		ib_fmr_pool_unmap(*pfmr++);
 
 	ib_dma_unmap_sg(ibdev, scsi_sglist(scmnd), scsi_sg_count(scmnd),
@@ -911,26 +912,26 @@ static int srp_map_finish_fmr(struct srp_map_state *state,
 	struct ib_pool_fmr *fmr;
 	u64 io_addr = 0;
 
-	if (!state->npages)
+	if (!state->fmr.npages)
 		return 0;
 
-	if (state->npages == 1) {
-		srp_map_desc(state, state->base_dma_addr, state->fmr_len,
+	if (state->fmr.npages == 1) {
+		srp_map_desc(state, state->fmr.base_dma_addr, state->fmr.fmr_len,
 			     target->rkey);
-		state->npages = state->fmr_len = 0;
+		state->fmr.npages = state->fmr.fmr_len = 0;
 		return 0;
 	}
 
-	fmr = ib_fmr_pool_map_phys(dev->fmr_pool, state->pages,
-				   state->npages, io_addr);
+	fmr = ib_fmr_pool_map_phys(dev->fmr_pool, state->fmr.pages,
+				   state->fmr.npages, io_addr);
 	if (IS_ERR(fmr))
 		return PTR_ERR(fmr);
 
-	*state->next_fmr++ = fmr;
-	state->nfmr++;
+	*state->fmr.next_fmr++ = fmr;
+	state->fmr.nfmr++;
 
-	srp_map_desc(state, 0, state->fmr_len, fmr->fmr->rkey);
-	state->npages = state->fmr_len = 0;
+	srp_map_desc(state, 0, state->fmr.fmr_len, fmr->fmr->rkey);
+	state->fmr.npages = state->fmr.fmr_len = 0;
 	return 0;
 }
 
@@ -938,9 +939,9 @@ static void srp_map_update_start(struct srp_map_state *state,
 				 struct scatterlist *sg, int sg_index,
 				 dma_addr_t dma_addr)
 {
-	state->unmapped_sg = sg;
-	state->unmapped_index = sg_index;
-	state->unmapped_addr = dma_addr;
+	state->fmr.unmapped_sg = sg;
+	state->fmr.unmapped_index = sg_index;
+	state->fmr.unmapped_addr = dma_addr;
 }
 
 static int srp_map_sg_entry(struct srp_map_state *state,
@@ -988,11 +989,11 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 	 * first unmapped address within that entry to be able to restart
 	 * mapping after an error.
 	 */
-	if (!state->unmapped_sg)
+	if (!state->fmr.unmapped_sg)
 		srp_map_update_start(state, sg, sg_index, dma_addr);
 
 	while (dma_len) {
-		if (state->npages == SRP_FMR_SIZE) {
+		if (state->fmr.npages == SRP_FMR_SIZE) {
 			ret = srp_map_finish_fmr(state, target);
 			if (ret)
 				return ret;
@@ -1002,10 +1003,10 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 
 		len = min_t(unsigned int, dma_len, dev->fmr_page_size);
 
-		if (!state->npages)
-			state->base_dma_addr = dma_addr;
-		state->pages[state->npages++] = dma_addr;
-		state->fmr_len += len;
+		if (!state->fmr.npages)
+			state->fmr.base_dma_addr = dma_addr;
+		state->fmr.pages[state->fmr.npages++] = dma_addr;
+		state->fmr.fmr_len += len;
 		dma_addr += len;
 		dma_len -= len;
 	}
@@ -1073,7 +1074,7 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 		buf->key = cpu_to_be32(target->rkey);
 		buf->len = cpu_to_be32(ib_sg_dma_len(ibdev, scat));
 
-		req->nfmr = 0;
+		req->fmr.nfmr = 0;
 		goto map_complete;
 	}
 
@@ -1088,8 +1089,8 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 
 	memset(&state, 0, sizeof(state));
 	state.desc	= req->indirect_desc;
-	state.pages	= req->map_page;
-	state.next_fmr	= req->fmr_list;
+	state.fmr.pages	= req->fmr.map_page;
+	state.fmr.next_fmr = req->fmr.fmr_list;
 
 	use_fmr = dev->fmr_pool ? SRP_MAP_ALLOW_FMR : SRP_MAP_NO_FMR;
 
@@ -1102,13 +1103,13 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 			unsigned int dma_len;
 
 backtrack:
-			sg = state.unmapped_sg;
-			i = state.unmapped_index;
+			sg = state.fmr.unmapped_sg;
+			i = state.fmr.unmapped_index;
 
 			dma_addr = ib_sg_dma_address(ibdev, sg);
 			dma_len = ib_sg_dma_len(ibdev, sg);
-			dma_len -= (state.unmapped_addr - dma_addr);
-			dma_addr = state.unmapped_addr;
+			dma_len -= (state.fmr.unmapped_addr - dma_addr);
+			dma_addr = state.fmr.unmapped_addr;
 			use_fmr = SRP_MAP_NO_FMR;
 			srp_map_desc(&state, dma_addr, dma_len, target->rkey);
 		}
@@ -1123,7 +1124,7 @@ backtrack:
 	 * guaranteed to fit into the command, as the SCSI layer won't
 	 * give us more S/G entries than we allow.
 	 */
-	req->nfmr = state.nfmr;
+	req->fmr.nfmr = state.fmr.nfmr;
 	if (state.ndesc == 1) {
 		/* FMR mapping was able to collapse this to one entry,
 		 * so use a direct descriptor.

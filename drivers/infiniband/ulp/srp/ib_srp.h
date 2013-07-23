@@ -111,12 +111,16 @@ struct srp_request {
 	struct list_head	list;
 	struct scsi_cmnd       *scmnd;
 	struct srp_iu	       *cmd;
-	struct ib_pool_fmr    **fmr_list;
-	u64		       *map_page;
 	struct srp_direct_buf  *indirect_desc;
 	dma_addr_t		indirect_dma_addr;
-	short			nfmr;
 	short			index;
+	union {
+		struct {
+			struct ib_pool_fmr    **fmr_list;
+			u64		       *map_page;
+			short			nfmr;
+		} fmr;
+	};
 };
 
 struct srp_target_port {
@@ -197,18 +201,22 @@ struct srp_iu {
 };
 
 struct srp_map_state {
-	struct ib_pool_fmr    **next_fmr;
 	struct srp_direct_buf  *desc;
-	u64		       *pages;
-	dma_addr_t		base_dma_addr;
-	u32			fmr_len;
-	u32			total_len;
-	unsigned int		npages;
-	unsigned int		nfmr;
 	unsigned int		ndesc;
-	struct scatterlist     *unmapped_sg;
-	int			unmapped_index;
-	dma_addr_t		unmapped_addr;
+	u32			total_len;
+	union {
+		struct {
+			struct ib_pool_fmr    **next_fmr;
+			u64		       *pages;
+			dma_addr_t		base_dma_addr;
+			u32			fmr_len;
+			unsigned int		npages;
+			unsigned int		nfmr;
+			struct scatterlist     *unmapped_sg;
+			int			unmapped_index;
+			dma_addr_t		unmapped_addr;
+		} fmr;
+	};
 };
 
 #endif /* IB_SRP_H */

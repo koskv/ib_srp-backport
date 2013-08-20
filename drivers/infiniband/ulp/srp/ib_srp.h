@@ -106,7 +106,11 @@ struct srp_device {
 struct srp_host {
 	struct srp_device      *srp_dev;
 	u8			port;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	struct class_device	dev;
+#else
 	struct device		dev;
+#endif
 	struct list_head	target_list;
 	spinlock_t		target_lock;
 	struct completion	released;

@@ -50,11 +50,20 @@ struct srp_rport {
 	bool			deleted;
 	int			reconnect_delay;
 	int			failed_reconnects;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	struct work_struct	reconnect_work;
+#else
 	struct delayed_work	reconnect_work;
+#endif
 	int			fast_io_fail_tmo;
 	int			dev_loss_tmo;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	struct work_struct	fast_io_fail_work;
+	struct work_struct	dev_loss_work;
+#else
 	struct delayed_work	fast_io_fail_work;
 	struct delayed_work	dev_loss_work;
+#endif
 };
 
 struct srp_function_template {

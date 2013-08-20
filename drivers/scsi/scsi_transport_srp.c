@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/delay.h>
+#include <linux/blkdev.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -54,16 +55,26 @@ struct srp_internal {
 	struct scsi_transport_template t;
 	struct srp_function_template *f;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	struct class_device_attribute *host_attrs[SRP_HOST_ATTRS + 1];
+
+	struct class_device_attribute *rport_attrs[SRP_RPORT_ATTRS + 1];
+#else
 	struct device_attribute *host_attrs[SRP_HOST_ATTRS + 1];
 
 	struct device_attribute *rport_attrs[SRP_RPORT_ATTRS + 1];
+#endif
 	struct transport_container rport_attr_cont;
 };
 
 #define to_srp_internal(tmpl) container_of(tmpl, struct srp_internal, t)
 
 #define	dev_to_rport(d)	container_of(d, struct srp_rport, dev)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+#define transport_class_to_srp_rport(classdev) dev_to_rport((classdev)->dev)
+#else
 #define transport_class_to_srp_rport(dev) dev_to_rport((dev)->parent)
+#endif
 static inline struct Scsi_Host *rport_to_shost(struct srp_rport *r)
 {
 	return dev_to_shost(r->dev.parent);
@@ -86,8 +97,10 @@ int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 		return -EINVAL;
 	if (fast_io_fail_tmo > SCSI_DEVICE_BLOCK_MAX_TIMEOUT)
 		return -EINVAL;
+#if 0
 	if (dev_loss_tmo >= LONG_MAX / HZ)
 		return -EINVAL;
+#endif
 	if (fast_io_fail_tmo >= 0 && dev_loss_tmo >= 0 &&
 	    fast_io_fail_tmo >= dev_loss_tmo)
 		return -EINVAL;
@@ -95,8 +108,13 @@ int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 }
 EXPORT_SYMBOL_GPL(srp_tmo_valid);
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static int srp_host_setup(struct transport_container *tc, struct device *dev,
+			  struct class_device *cdev)
+#else
 static int srp_host_setup(struct transport_container *tc, struct device *dev,
 			  struct device *cdev)
+#endif
 {
 	struct Scsi_Host *shost = dev_to_shost(dev);
 	struct srp_host_attrs *srp_host = to_srp_host_attrs(shost);
@@ -120,15 +138,24 @@ static DECLARE_TRANSPORT_CLASS(srp_rport_class, "srp_remote_ports",
 #define SRP_PID_FMT "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:" \
 	"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t
+show_srp_rport_id(struct class_device *dev, char *buf)
+#else
 static ssize_t
 show_srp_rport_id(struct device *dev, struct device_attribute *attr,
 		  char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	return sprintf(buf, SRP_PID_FMT "\n", SRP_PID(rport));
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(port_id, S_IRUGO, show_srp_rport_id, NULL);
+#else
 static DEVICE_ATTR(port_id, S_IRUGO, show_srp_rport_id, NULL);
+#endif
 
 static const struct {
 	u32 value;
@@ -138,9 +165,14 @@ static const struct {
 	{SRP_RPORT_ROLE_TARGET, "SRP Target"},
 };
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t
+show_srp_rport_roles(struct class_device *dev, char *buf)
+#else
 static ssize_t
 show_srp_rport_roles(struct device *dev, struct device_attribute *attr,
 		     char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	int i;
@@ -154,14 +186,25 @@ show_srp_rport_roles(struct device *dev, struct device_attribute *attr,
 	return sprintf(buf, "%s\n", name ? : "unknown");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(roles, S_IRUGO, show_srp_rport_roles, NULL);
+#else
 static DEVICE_ATTR(roles, S_IRUGO, show_srp_rport_roles, NULL);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t store_srp_rport_delete(struct class_device *dev,
+				      const char *buf, size_t count)
+{
+	struct Scsi_Host *shost = dev_to_shost(dev->dev);
+#else
 static ssize_t store_srp_rport_delete(struct device *dev,
 				      struct device_attribute *attr,
 				      const char *buf, size_t count)
 {
-	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	struct Scsi_Host *shost = dev_to_shost(dev);
+#endif
+	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	struct srp_internal *i = to_srp_internal(shost->transportt);
 
 	if (i->f->rport_delete) {
@@ -172,11 +215,19 @@ static ssize_t store_srp_rport_delete(struct device *dev,
 	}
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(delete, S_IWUSR, NULL, store_srp_rport_delete);
+#else
 static DEVICE_ATTR(delete, S_IWUSR, NULL, store_srp_rport_delete);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_srp_rport_state(struct class_device *dev, char *buf)
+#else
 static ssize_t show_srp_rport_state(struct device *dev,
 				    struct device_attribute *attr,
 				    char *buf)
+#endif
 {
 	static const char *const state_name[] = {
 		[SRP_RPORT_RUNNING]	= "running",
@@ -192,10 +243,18 @@ static ssize_t show_srp_rport_state(struct device *dev,
 		       state_name[state] : "???");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(state, S_IRUGO, show_srp_rport_state, NULL);
+#else
 static DEVICE_ATTR(state, S_IRUGO, show_srp_rport_state, NULL);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_reconnect_delay(struct class_device *dev, char *buf)
+#else
 static ssize_t show_reconnect_delay(struct device *dev,
 				    struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
@@ -205,9 +264,14 @@ static ssize_t show_reconnect_delay(struct device *dev,
 		return sprintf(buf, "off\n");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t store_reconnect_delay(struct class_device *dev,
+				     const char *buf, const size_t count)
+#else
 static ssize_t store_reconnect_delay(struct device *dev,
 				     struct device_attribute *attr,
 				     const char *buf, const size_t count)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	int res, delay;
@@ -238,22 +302,41 @@ out:
 	return res;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(reconnect_delay, S_IRUGO | S_IWUSR,
+			 show_reconnect_delay, store_reconnect_delay);
+#else
 static DEVICE_ATTR(reconnect_delay, S_IRUGO | S_IWUSR, show_reconnect_delay,
 		   store_reconnect_delay);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_failed_reconnects(struct class_device *dev, char *buf)
+#else
 static ssize_t show_failed_reconnects(struct device *dev,
 				      struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
 	return sprintf(buf, "%d\n", rport->failed_reconnects);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(failed_reconnects, S_IRUGO, show_failed_reconnects,
+			 NULL);
+#else
 static DEVICE_ATTR(failed_reconnects, S_IRUGO, show_failed_reconnects, NULL);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_srp_rport_fast_io_fail_tmo(struct class_device *dev,
+					       char *buf)
+#else
 static ssize_t show_srp_rport_fast_io_fail_tmo(struct device *dev,
 					       struct device_attribute *attr,
 					       char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
@@ -263,9 +346,14 @@ static ssize_t show_srp_rport_fast_io_fail_tmo(struct device *dev,
 		return sprintf(buf, "off\n");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t store_srp_rport_fast_io_fail_tmo(struct class_device *dev,
+						const char *buf, size_t count)
+#else
 static ssize_t store_srp_rport_fast_io_fail_tmo(struct device *dev,
 						struct device_attribute *attr,
 						const char *buf, size_t count)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	int res;
@@ -289,13 +377,23 @@ out:
 	return res;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(fast_io_fail_tmo, S_IRUGO | S_IWUSR,
+			 show_srp_rport_fast_io_fail_tmo,
+			 store_srp_rport_fast_io_fail_tmo);
+#else
 static DEVICE_ATTR(fast_io_fail_tmo, S_IRUGO | S_IWUSR,
 		   show_srp_rport_fast_io_fail_tmo,
 		   store_srp_rport_fast_io_fail_tmo);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_srp_rport_dev_loss_tmo(struct class_device *dev, char *buf)
+#else
 static ssize_t show_srp_rport_dev_loss_tmo(struct device *dev,
 					   struct device_attribute *attr,
 					   char *buf)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
@@ -305,9 +403,14 @@ static ssize_t show_srp_rport_dev_loss_tmo(struct device *dev,
 		return sprintf(buf, "off\n");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t store_srp_rport_dev_loss_tmo(struct class_device *dev,
+					    const char *buf, size_t count)
+#else
 static ssize_t store_srp_rport_dev_loss_tmo(struct device *dev,
 					    struct device_attribute *attr,
 					    const char *buf, size_t count)
+#endif
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	int res;
@@ -331,9 +434,15 @@ out:
 	return res;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(dev_loss_tmo, S_IRUGO | S_IWUSR,
+			 show_srp_rport_dev_loss_tmo,
+			 store_srp_rport_dev_loss_tmo);
+#else
 static DEVICE_ATTR(dev_loss_tmo, S_IRUGO | S_IWUSR,
 		   show_srp_rport_dev_loss_tmo,
 		   store_srp_rport_dev_loss_tmo);
+#endif
 
 static int srp_rport_set_state(struct srp_rport *rport,
 			       enum srp_rport_state new_state)
@@ -466,10 +575,16 @@ EXPORT_SYMBOL(srp_reconnect_rport);
 /**
  * srp_reconnect_work() - reconnect and schedule a new attempt if necessary
  */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void srp_reconnect_work(void *arg)
+{
+	struct srp_rport *rport = arg;
+#else
 static void srp_reconnect_work(struct work_struct *work)
 {
 	struct srp_rport *rport = container_of(to_delayed_work(work),
 					struct srp_rport, reconnect_work);
+#endif
 	struct Scsi_Host *shost = rport_to_shost(rport);
 	int delay, res;
 
@@ -506,10 +621,16 @@ static void __rport_fail_io_fast(struct srp_rport *rport)
 /**
  * rport_fast_io_fail_timedout() - fast I/O failure timeout handler
  */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void rport_fast_io_fail_timedout(void *arg)
+{
+	struct srp_rport *rport = arg;
+#else
 static void rport_fast_io_fail_timedout(struct work_struct *work)
 {
 	struct srp_rport *rport = container_of(to_delayed_work(work),
 					struct srp_rport, fast_io_fail_work);
+#endif
 	struct Scsi_Host *shost = rport_to_shost(rport);
 
 	pr_debug("fast_io_fail_tmo expired for %s.\n",
@@ -523,10 +644,16 @@ static void rport_fast_io_fail_timedout(struct work_struct *work)
 /**
  * rport_dev_loss_timedout() - device loss timeout handler
  */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void rport_dev_loss_timedout(void *arg)
+{
+	struct srp_rport *rport = arg;
+#else
 static void rport_dev_loss_timedout(struct work_struct *work)
 {
 	struct srp_rport *rport = container_of(to_delayed_work(work),
 					struct srp_rport, dev_loss_work);
+#endif
 	struct Scsi_Host *shost = rport_to_shost(rport);
 	struct srp_internal *i = to_srp_internal(shost->transportt);
 
@@ -589,6 +716,7 @@ void srp_start_tl_fail_timers(struct srp_rport *rport)
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 /**
  * srp_timed_out() - SRP transport intercept of the SCSI timeout EH
  *
@@ -609,14 +737,21 @@ static enum blk_eh_timer_return srp_timed_out(struct scsi_cmnd *scmd)
 	return i->f->reset_timer_if_blocked && scsi_device_blocked(sdev) ?
 		BLK_EH_RESET_TIMER : BLK_EH_NOT_HANDLED;
 }
+#endif
 
 static void srp_rport_release(struct device *dev)
 {
 	struct srp_rport *rport = dev_to_rport(dev);
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	cancel_work_sync(&rport->reconnect_work);
+	cancel_work_sync(&rport->fast_io_fail_work);
+	cancel_work_sync(&rport->dev_loss_work);
+#else
 	cancel_delayed_work_sync(&rport->reconnect_work);
 	cancel_delayed_work_sync(&rport->fast_io_fail_work);
 	cancel_delayed_work_sync(&rport->dev_loss_work);
+#endif
 
 	put_device(dev->parent);
 	kfree(rport);
@@ -714,16 +849,30 @@ struct srp_rport *srp_rport_add(struct Scsi_Host *shost,
 	if (i->f->reconnect)
 		rport->reconnect_delay = i->f->reconnect_delay ?
 			*i->f->reconnect_delay : 10;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	INIT_WORK(&rport->reconnect_work, srp_reconnect_work, rport);
+#else
 	INIT_DELAYED_WORK(&rport->reconnect_work, srp_reconnect_work);
+#endif
 	rport->fast_io_fail_tmo = i->f->fast_io_fail_tmo ?
 		*i->f->fast_io_fail_tmo : 15;
 	rport->dev_loss_tmo = i->f->dev_loss_tmo ? *i->f->dev_loss_tmo : 600;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	INIT_WORK(&rport->fast_io_fail_work, rport_fast_io_fail_timedout,
+		  rport);
+	INIT_WORK(&rport->dev_loss_work, rport_dev_loss_timedout, rport);
+#else
 	INIT_DELAYED_WORK(&rport->fast_io_fail_work,
 			  rport_fast_io_fail_timedout);
 	INIT_DELAYED_WORK(&rport->dev_loss_work, rport_dev_loss_timedout);
+#endif
 
 	id = atomic_inc_return(&to_srp_host_attrs(shost)->next_port_id);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	sprintf(rport->dev.bus_id, "port-%d:%d", shost->host_no, id);
+#else
 	dev_set_name(&rport->dev, "port-%d:%d", shost->host_no, id);
+#endif
 
 	transport_setup_device(&rport->dev);
 
@@ -806,6 +955,7 @@ void srp_remove_host(struct Scsi_Host *shost)
 }
 EXPORT_SYMBOL_GPL(srp_remove_host);
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 static int srp_tsk_mgmt_response(struct Scsi_Host *shost, u64 nexus, u64 tm_id,
 				 int result)
 {
@@ -818,6 +968,7 @@ static int srp_it_nexus_response(struct Scsi_Host *shost, u64 nexus, int result)
 	struct srp_internal *i = to_srp_internal(shost->transportt);
 	return i->f->it_nexus_response(shost, nexus, result);
 }
+#endif
 
 /**
  * srp_attach_transport  -  instantiate SRP transport template
@@ -833,10 +984,12 @@ srp_attach_transport(struct srp_function_template *ft)
 	if (!i)
 		return NULL;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 	i->t.eh_timed_out = srp_timed_out;
 
 	i->t.tsk_mgmt_response = srp_tsk_mgmt_response;
 	i->t.it_nexus_response = srp_it_nexus_response;
+#endif
 
 	i->t.host_size = sizeof(struct srp_host_attrs);
 	i->t.host_attrs.ac.attrs = &i->host_attrs[0];
@@ -850,6 +1003,21 @@ srp_attach_transport(struct srp_function_template *ft)
 	i->rport_attr_cont.ac.match = srp_rport_match;
 
 	count = 0;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	i->rport_attrs[count++] = &class_device_attr_port_id;
+	i->rport_attrs[count++] = &class_device_attr_roles;
+	if (ft->has_rport_state) {
+		i->rport_attrs[count++] = &class_device_attr_state;
+		i->rport_attrs[count++] = &class_device_attr_fast_io_fail_tmo;
+		i->rport_attrs[count++] = &class_device_attr_dev_loss_tmo;
+	}
+	if (ft->reconnect) {
+		i->rport_attrs[count++] = &class_device_attr_reconnect_delay;
+		i->rport_attrs[count++] = &class_device_attr_failed_reconnects;
+	}
+	if (ft->rport_delete)
+		i->rport_attrs[count++] = &class_device_attr_delete;
+#else
 	i->rport_attrs[count++] = &dev_attr_port_id;
 	i->rport_attrs[count++] = &dev_attr_roles;
 	if (ft->has_rport_state) {
@@ -863,6 +1031,7 @@ srp_attach_transport(struct srp_function_template *ft)
 	}
 	if (ft->rport_delete)
 		i->rport_attrs[count++] = &dev_attr_delete;
+#endif
 	i->rport_attrs[count++] = NULL;
 	BUG_ON(count > ARRAY_SIZE(i->rport_attrs));
 

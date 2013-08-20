@@ -69,7 +69,11 @@ MODULE_LICENSE("Dual BSD/GPL");
 static unsigned int srp_sg_tablesize;
 static unsigned int cmd_sg_entries;
 static unsigned int indirect_sg_entries;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static int allow_ext_sg;
+#else
 static bool allow_ext_sg;
+#endif
 static int topspin_workarounds = 1;
 
 module_param(srp_sg_tablesize, uint, 0444);
@@ -83,7 +87,11 @@ module_param(indirect_sg_entries, uint, 0444);
 MODULE_PARM_DESC(indirect_sg_entries,
 		 "Default max number of gather/scatter entries (default is 12, max is " __stringify(SCSI_MAX_SG_CHAIN_SEGMENTS) ")");
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+module_param(allow_ext_sg, int, 0444);
+#else
 module_param(allow_ext_sg, bool, 0444);
+#endif
 MODULE_PARM_DESC(allow_ext_sg,
 		  "Default behavior when there are more than cmd_sg_entries S/G entries after mapping; fails the request when false (default false)");
 
@@ -704,10 +712,17 @@ out:
  */
 static void srp_del_scsi_host_attr(struct Scsi_Host *shost)
 {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	struct class_device_attribute **attr;
+
+	for (attr = shost->hostt->shost_attrs; attr && *attr; ++attr)
+		class_device_remove_file(&shost->shost_classdev, *attr);
+#else
 	struct device_attribute **attr;
 
 	for (attr = shost->hostt->shost_attrs; attr && *attr; ++attr)
 		device_remove_file(&shost->shost_dev, *attr);
+#endif
 }
 
 static void srp_remove_target(struct srp_target_port *target)
@@ -727,10 +742,16 @@ static void srp_remove_target(struct srp_target_port *target)
 	scsi_host_put(target->scsi_host);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void srp_remove_work(void *arg)
+{
+	struct srp_target_port *target = arg;
+#else
 static void srp_remove_work(struct work_struct *work)
 {
 	struct srp_target_port *target =
 		container_of(work, struct srp_target_port, remove_work);
+#endif
 
 	WARN_ON_ONCE(target->state != SRP_TARGET_REMOVED);
 
@@ -1637,11 +1658,17 @@ static void srp_handle_recv(struct srp_target_port *target, struct ib_wc *wc)
  * Note: This function may get invoked before the rport has been created,
  * hence the target->rport test.
  */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void srp_tl_err_work(void *arg)
+{
+	struct srp_target_port *target = arg;
+#else
 static void srp_tl_err_work(struct work_struct *work)
 {
 	struct srp_target_port *target;
 
 	target = container_of(work, struct srp_target_port, tl_err_work);
+#endif
 	if (target->rport)
 		srp_start_tl_fail_timers(target->rport);
 }
@@ -2241,6 +2268,7 @@ static int srp_reset_host(struct scsi_cmnd *scmnd)
 
 static int srp_slave_configure(struct scsi_device *sdev)
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 	struct Scsi_Host *shost = sdev->host;
 	struct srp_target_port *target = host_to_target(shost);
 	struct request_queue *q = sdev->request_queue;
@@ -2250,12 +2278,17 @@ static int srp_slave_configure(struct scsi_device *sdev)
 		timeout = max_t(unsigned, 30 * HZ, target->rq_tmo_jiffies);
 		blk_queue_rq_timeout(q, timeout);
 	}
+#endif
 
 	return 0;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_id_ext(struct class_device *dev, char *buf)
+#else
 static ssize_t show_id_ext(struct device *dev, struct device_attribute *attr,
 			   char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
@@ -2263,8 +2296,12 @@ static ssize_t show_id_ext(struct device *dev, struct device_attribute *attr,
 		       (unsigned long long) be64_to_cpu(target->id_ext));
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_ioc_guid(struct class_device *dev, char *buf)
+#else
 static ssize_t show_ioc_guid(struct device *dev, struct device_attribute *attr,
 			     char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
@@ -2272,8 +2309,12 @@ static ssize_t show_ioc_guid(struct device *dev, struct device_attribute *attr,
 		       (unsigned long long) be64_to_cpu(target->ioc_guid));
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_service_id(struct class_device *dev, char *buf)
+#else
 static ssize_t show_service_id(struct device *dev,
 			       struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
@@ -2281,102 +2322,167 @@ static ssize_t show_service_id(struct device *dev,
 		       (unsigned long long) be64_to_cpu(target->service_id));
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_pkey(struct class_device *dev, char *buf)
+#else
 static ssize_t show_pkey(struct device *dev, struct device_attribute *attr,
 			 char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "0x%04x\n", be16_to_cpu(target->path.pkey));
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_dgid(struct class_device *dev, char *buf)
+#else
 static ssize_t show_dgid(struct device *dev, struct device_attribute *attr,
 			 char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%pI6\n", target->path.dgid.raw);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_orig_dgid(struct class_device *dev, char *buf)
+#else
 static ssize_t show_orig_dgid(struct device *dev,
 			      struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%pI6\n", target->orig_dgid);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_req_lim(struct class_device *dev, char *buf)
+#else
 static ssize_t show_req_lim(struct device *dev,
 			    struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->req_lim);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_zero_req_lim(struct class_device *dev, char *buf)
+#else
 static ssize_t show_zero_req_lim(struct device *dev,
 				 struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->zero_req_lim);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_local_ib_port(struct class_device *dev, char *buf)
+#else
 static ssize_t show_local_ib_port(struct device *dev,
 				  struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->srp_host->port);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_local_ib_device(struct class_device *dev, char *buf)
+#else
 static ssize_t show_local_ib_device(struct device *dev,
 				    struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%s\n", target->srp_host->srp_dev->dev->name);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_comp_vector(struct class_device *dev, char *buf)
+#else
 static ssize_t show_comp_vector(struct device *dev,
 				struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->comp_vector);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_tl_retry_count(struct class_device *dev, char *buf)
+#else
 static ssize_t show_tl_retry_count(struct device *dev,
 				   struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->tl_retry_count);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_fast_reg(struct class_device *dev, char *buf)
+#else
 static ssize_t show_fast_reg(struct device *dev, struct device_attribute *attr,
 			     char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%d\n", target->use_fast_reg);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_cmd_sg_entries(struct class_device *dev, char *buf)
+#else
 static ssize_t show_cmd_sg_entries(struct device *dev,
 				   struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%u\n", target->cmd_sg_cnt);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_allow_ext_sg(struct class_device *dev, char *buf)
+#else
 static ssize_t show_allow_ext_sg(struct device *dev,
 				 struct device_attribute *attr, char *buf)
+#endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
 	return sprintf(buf, "%s\n", target->allow_ext_sg ? "true" : "false");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(id_ext,	  S_IRUGO, show_id_ext,	         NULL);
+static CLASS_DEVICE_ATTR(ioc_guid,	  S_IRUGO, show_ioc_guid,	 NULL);
+static CLASS_DEVICE_ATTR(service_id,	  S_IRUGO, show_service_id,	 NULL);
+static CLASS_DEVICE_ATTR(pkey,            S_IRUGO, show_pkey,		 NULL);
+static CLASS_DEVICE_ATTR(dgid,	          S_IRUGO, show_dgid,		 NULL);
+static CLASS_DEVICE_ATTR(orig_dgid,	  S_IRUGO, show_orig_dgid,	 NULL);
+static CLASS_DEVICE_ATTR(req_lim,         S_IRUGO, show_req_lim,         NULL);
+static CLASS_DEVICE_ATTR(zero_req_lim,    S_IRUGO, show_zero_req_lim,	 NULL);
+static CLASS_DEVICE_ATTR(local_ib_port,   S_IRUGO, show_local_ib_port,   NULL);
+static CLASS_DEVICE_ATTR(local_ib_device, S_IRUGO, show_local_ib_device, NULL);
+static CLASS_DEVICE_ATTR(comp_vector,     S_IRUGO, show_comp_vector,     NULL);
+static CLASS_DEVICE_ATTR(tl_retry_count,  S_IRUGO, show_tl_retry_count,  NULL);
+static CLASS_DEVICE_ATTR(fast_reg,	  S_IRUGO, show_fast_reg,        NULL);
+static CLASS_DEVICE_ATTR(cmd_sg_entries,  S_IRUGO, show_cmd_sg_entries,  NULL);
+static CLASS_DEVICE_ATTR(allow_ext_sg,    S_IRUGO, show_allow_ext_sg,    NULL);
+#else
 static DEVICE_ATTR(id_ext,	    S_IRUGO, show_id_ext,	   NULL);
 static DEVICE_ATTR(ioc_guid,	    S_IRUGO, show_ioc_guid,	   NULL);
 static DEVICE_ATTR(service_id,	    S_IRUGO, show_service_id,	   NULL);
@@ -2392,7 +2498,28 @@ static DEVICE_ATTR(tl_retry_count,  S_IRUGO, show_tl_retry_count,  NULL);
 static DEVICE_ATTR(fast_reg,	    S_IRUGO, show_fast_reg,        NULL);
 static DEVICE_ATTR(cmd_sg_entries,  S_IRUGO, show_cmd_sg_entries,  NULL);
 static DEVICE_ATTR(allow_ext_sg,    S_IRUGO, show_allow_ext_sg,    NULL);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static struct class_device_attribute *srp_host_attrs[] = {
+	&class_device_attr_id_ext,
+	&class_device_attr_ioc_guid,
+	&class_device_attr_service_id,
+	&class_device_attr_pkey,
+	&class_device_attr_dgid,
+	&class_device_attr_orig_dgid,
+	&class_device_attr_req_lim,
+	&class_device_attr_zero_req_lim,
+	&class_device_attr_local_ib_port,
+	&class_device_attr_local_ib_device,
+	&class_device_attr_comp_vector,
+	&class_device_attr_tl_retry_count,
+	&class_device_attr_fast_reg,
+	&class_device_attr_cmd_sg_entries,
+	&class_device_attr_allow_ext_sg,
+	NULL
+};
+#else
 static struct device_attribute *srp_host_attrs[] = {
 	&dev_attr_id_ext,
 	&dev_attr_ioc_guid,
@@ -2411,6 +2538,7 @@ static struct device_attribute *srp_host_attrs[] = {
 	&dev_attr_allow_ext_sg,
 	NULL
 };
+#endif
 
 static struct scsi_host_template srp_template = {
 	.module				= THIS_MODULE,
@@ -2469,7 +2597,11 @@ static int srp_add_target(struct srp_host *host, struct srp_target_port *target)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static void srp_release_dev(struct class_device *dev)
+#else
 static void srp_release_dev(struct device *dev)
+#endif
 {
 	struct srp_host *host =
 		container_of(dev, struct srp_host, dev);
@@ -2479,7 +2611,11 @@ static void srp_release_dev(struct device *dev)
 
 static struct class srp_class = {
 	.name    = "infiniband_srp",
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	.release = srp_release_dev
+#else
 	.dev_release = srp_release_dev
+#endif
 };
 
 /**
@@ -2545,7 +2681,11 @@ enum {
 				   SRP_OPT_SERVICE_ID),
 };
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static match_table_t srp_opt_tokens = {
+#else
 static const match_table_t srp_opt_tokens = {
+#endif
 	{ SRP_OPT_ID_EXT,		"id_ext=%s" 		},
 	{ SRP_OPT_IOC_GUID,		"ioc_guid=%s" 		},
 	{ SRP_OPT_DGID,			"dgid=%s" 		},
@@ -2782,9 +2922,14 @@ out:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t srp_create_target(struct class_device *dev,
+				 const char *buf, size_t count)
+#else
 static ssize_t srp_create_target(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
+#endif
 {
 	struct srp_host *host =
 		container_of(dev, struct srp_host, dev);
@@ -2848,8 +2993,13 @@ static ssize_t srp_create_target(struct device *dev,
 			     sizeof (struct srp_indirect_buf) +
 			     target->cmd_sg_cnt * sizeof (struct srp_direct_buf);
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	INIT_WORK(&target->tl_err_work, srp_tl_err_work, target);
+	INIT_WORK(&target->remove_work, srp_remove_work, target);
+#else
 	INIT_WORK(&target->tl_err_work, srp_tl_err_work);
 	INIT_WORK(&target->remove_work, srp_remove_work);
+#endif
 	spin_lock_init(&target->lock);
 	INIT_LIST_HEAD(&target->free_tx);
 	ret = srp_alloc_req_data(target);
@@ -2906,27 +3056,47 @@ err:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(add_target, S_IWUSR, NULL, srp_create_target);
+#else
 static DEVICE_ATTR(add_target, S_IWUSR, NULL, srp_create_target);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_ibdev(struct class_device *dev, char *buf)
+#else
 static ssize_t show_ibdev(struct device *dev, struct device_attribute *attr,
 			  char *buf)
+#endif
 {
 	struct srp_host *host = container_of(dev, struct srp_host, dev);
 
 	return sprintf(buf, "%s\n", host->srp_dev->dev->name);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(ibdev, S_IRUGO, show_ibdev, NULL);
+#else
 static DEVICE_ATTR(ibdev, S_IRUGO, show_ibdev, NULL);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_port(struct class_device *dev, char *buf)
+#else
 static ssize_t show_port(struct device *dev, struct device_attribute *attr,
 			 char *buf)
+#endif
 {
 	struct srp_host *host = container_of(dev, struct srp_host, dev);
 
 	return sprintf(buf, "%d\n", host->port);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static CLASS_DEVICE_ATTR(port, S_IRUGO, show_port, NULL);
+#else
 static DEVICE_ATTR(port, S_IRUGO, show_port, NULL);
+#endif
 
 static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 {
@@ -2943,9 +3113,25 @@ static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 	host->port = port;
 
 	host->dev.class = &srp_class;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	host->dev.dev = device->dev->dma_device;
+	snprintf(host->dev.class_id, BUS_ID_SIZE, "srp-%s-%d",
+		 device->dev->name, port);
+#else
 	host->dev.parent = device->dev->dma_device;
 	dev_set_name(&host->dev, "srp-%s-%d", device->dev->name, port);
+#endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	if (class_device_register(&host->dev))
+		goto free_host;
+	if (class_device_create_file(&host->dev, &class_device_attr_add_target))
+		goto err_class;
+	if (class_device_create_file(&host->dev, &class_device_attr_ibdev))
+		goto err_class;
+	if (class_device_create_file(&host->dev, &class_device_attr_port))
+		goto err_class;
+#else
 	if (device_register(&host->dev))
 		goto free_host;
 	if (device_create_file(&host->dev, &dev_attr_add_target))
@@ -2954,11 +3140,16 @@ static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 		goto err_class;
 	if (device_create_file(&host->dev, &dev_attr_port))
 		goto err_class;
+#endif
 
 	return host;
 
 err_class:
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	class_device_unregister(&host->dev);
+#else
 	device_unregister(&host->dev);
+#endif
 
 free_host:
 	kfree(host);
@@ -2994,12 +3185,21 @@ static void srp_add_one(struct ib_device *device)
 		if (dev_attr->page_size_cap & SRP_MIN_PAGE_SIZE) {
 			srp_dev->use_fast_reg = true;
 		} else {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+			dev_err(device->dma_device, "page size %d is not supported\n",
+				SRP_MIN_PAGE_SIZE);
+#else
 			dev_err(&device->dev, "page size %d is not supported\n",
 				SRP_MIN_PAGE_SIZE);
+#endif
 			goto free_dev;
 		}
 	} else {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+		dev_err(device->dma_device, "neither FMR nor FRWR is supported\n");
+#else
 		dev_err(&device->dev, "neither FMR nor FRWR is supported\n");
+#endif
 		goto free_dev;
 	}
 
@@ -3089,7 +3289,11 @@ static void srp_remove_one(struct ib_device *device)
 		return;
 
 	list_for_each_entry_safe(host, tmp_host, &srp_dev->dev_list, list) {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+		class_device_unregister(&host->dev);
+#else
 		device_unregister(&host->dev);
+#endif
 		/*
 		 * Wait for the sysfs entry to go away, so that no new
 		 * target ports can be created.

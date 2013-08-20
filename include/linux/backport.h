@@ -39,9 +39,25 @@ static inline int __must_check kstrtoint(const char *s, unsigned int base,
 }
 #endif
 
+/* <linux/lockdep.h> */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 32)
+#define lockdep_assert_held(lock) do { } while(0)
+#endif
+
 /* <linux/printk.h> */
 #ifndef pr_warn
 #define pr_warn pr_warning
+#endif
+
+/* <linux/scatterlist.h> */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+#define for_each_sg(sglist, sg, nr, __i)        \
+	for (__i = 0, sg = (sglist); __i < (nr); __i++, (sg)++)
+#endif
+
+/* <linux/types.h> */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+typedef unsigned long uintptr_t;
 #endif
 
 /* <rdma/ib_verbs.h> */
@@ -57,6 +73,18 @@ static inline u32 ib_inc_rkey(u32 rkey)
 	const u32 mask = 0x000000ff;
 	return ((rkey + 1) & mask) | (rkey & ~mask);
 }
+#endif
+
+/* <scsi/scsi.h> */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35) && !defined(FAST_IO_FAIL)
+/*
+ * commit 2f2eb58 ([SCSI] Allow FC LLD to fast-fail scsi eh by introducing new
+ * eh return)
+ */
+#define FAST_IO_FAIL FAILED
+#endif
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+#define SCSI_MAX_SG_CHAIN_SEGMENTS (PAGE_SIZE / sizeof(void*))
 #endif
 
 /* <scsi/scsi_device.h> */

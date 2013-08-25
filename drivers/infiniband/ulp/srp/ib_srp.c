@@ -330,6 +330,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 	struct ib_qp_init_attr *init_attr;
 	struct ib_cq *recv_cq, *send_cq;
 	struct ib_qp *qp;
+	const int m = 1 + target->use_fast_reg;
 	int ret;
 
 	init_attr = kzalloc(sizeof *init_attr, GFP_KERNEL);
@@ -346,7 +347,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 
 	send_cq = ib_create_cq(target->srp_host->srp_dev->dev,
 			       srp_send_completion, NULL, target,
-			       target->queue_size, target->comp_vector);
+			       m * target->queue_size, target->comp_vector);
 	if (IS_ERR(send_cq)) {
 		ret = PTR_ERR(send_cq);
 		goto err_recv_cq;
@@ -355,7 +356,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 	ib_req_notify_cq(recv_cq, IB_CQ_NEXT_COMP);
 
 	init_attr->event_handler       = srp_qp_event;
-	init_attr->cap.max_send_wr     = target->queue_size;
+	init_attr->cap.max_send_wr     = m * target->queue_size;
 	init_attr->cap.max_recv_wr     = target->queue_size;
 	init_attr->cap.max_recv_sge    = 1;
 	init_attr->cap.max_send_sge    = 1;

@@ -2212,8 +2212,14 @@ srp_change_queue_type(struct scsi_device *sdev, int tag_type)
  * Returns queue depth.
  */
 static int
+#ifdef HAVE_SCSI_QDEPTH_REASON
 srp_change_queue_depth(struct scsi_device *sdev, int qdepth, int reason)
 {
+#else
+srp_change_queue_depth(struct scsi_device *sdev, int qdepth)
+{
+	const int reason = SCSI_QDEPTH_DEFAULT;
+#endif
 	struct Scsi_Host *shost = sdev->host;
 	int max_depth;
 	if (reason == SCSI_QDEPTH_DEFAULT || reason == SCSI_QDEPTH_RAMP_UP) {

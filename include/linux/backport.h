@@ -106,4 +106,20 @@ static inline void scsi_target_unblock_compat(struct device *dev,
 
 #define scsi_target_unblock scsi_target_unblock_compat
 
+/* <scsi/scsi_host.h> */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33) || \
+	(defined(RHEL_MAJOR) && RHEL_MAJOR -0 >= 6)
+#define HAVE_SCSI_QDEPTH_REASON
+#else
+/*
+ * See also commit e881a172 (modify change_queue_depth to take in reason why it
+ * is being called).
+ */
+enum {
+	SCSI_QDEPTH_DEFAULT,	/* default requested change, e.g. from sysfs */
+	SCSI_QDEPTH_QFULL,	/* scsi-ml requested due to queue full */
+	SCSI_QDEPTH_RAMP_UP,	/* scsi-ml requested due to threshold event */
+};
+#endif
+
 #endif

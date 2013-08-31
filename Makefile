@@ -128,8 +128,9 @@ rpm:
 	cp $${name}-$(VERSION).tar.bz2 $${rpmtopdir}/SOURCES &&		 \
 	kv="$${KVER:-$$(uname -r)}" &&					 \
 	{								 \
-	  krpm="$$(rpm -qf /lib/modules/$${kv} 2>&1)";			 \
-	  if [ $$? = 0 ]; then						 \
+	  krpm="$$(rpm -qf /boot/vmlinuz-$${kv} 2>/dev/null |		 \
+		grep -v 'is not owned by any package' | head -n 1)";	 \
+	  if [ -n "$$krpm" ]; then					 \
 	    kname="$$(rpm -q --qf %{NAME} $${krpm})" &&			 \
 	    kver="$$(rpm -q --qf %{VERSION} $${krpm})" &&		 \
 	    krpm_arg="--define=%kernel_rpm $${kname} = $${kver}";	 \

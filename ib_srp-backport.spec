@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.1
+Version:	2.0.2
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -47,6 +47,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Sep 02 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.2
+- Avoid offlining operational SCSI devices
 * Wed Aug 28 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.1
 - Enlarged IB send queue size when using FRWR.
 * Thu Aug 22 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.0

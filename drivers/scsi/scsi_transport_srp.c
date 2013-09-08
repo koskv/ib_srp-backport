@@ -499,7 +499,8 @@ static int scsi_request_fn_active(struct Scsi_Host *shost)
 		q = sdev->request_queue;
 
 		spin_lock_irq(q->queue_lock);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) && \
+	!defined(CONFIG_SUSE_KERNEL)
 		/* See also commit 24faf6f6 */
 		request_fn_active += q->request_fn_active;
 #endif

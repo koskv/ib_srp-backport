@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.3
+Version:	2.0.4
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -47,6 +47,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Sun Sep 09 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.4
+- The RPM depends now on /boot/vmlinuz-\${kv} instead of /lib/modules/\${kv}.
 * Sun Sep 08 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.3
 - Since IB symbols are not in the KABI, make this RPM dependent on the kernel
   RPM it has been built against.

@@ -131,9 +131,7 @@ rpm:
 	  krpm="$$(rpm -qf /boot/vmlinuz-$${kv} 2>/dev/null |		 \
 		grep -v 'is not owned by any package' | head -n 1)";	 \
 	  if [ -n "$$krpm" ]; then					 \
-	    kname="$$(rpm -q --qf %{NAME} $${krpm})" &&			 \
-	    kver="$$(rpm -q --qf %{VERSION} $${krpm})" &&		 \
-	    krpm_arg="--define=%kernel_rpm $${kname} = $${kver}";	 \
+	    krpm_arg="--define=%kernel_rpm /lib/modules/%{kversion}";	 \
 	  else								 \
 	    krpm_arg="--define=%kernel_rpm %{nil}";			 \
 	  fi;								 \

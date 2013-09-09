@@ -1187,10 +1187,6 @@ static int srp_map_frwr(struct srp_map_state *state,
 
 	page_mask = ~((1ULL << page_shift) - 1);
 
-	/*
-	 * To do: add bounce buffer support in case an sg vector exceeds
-	 * a single FRWR page list.
-	 */
 	for_each_sg(scat, sg, count, i) {
 		dma_addr = ib_sg_dma_address(ibdev, sg);
 		dma_len = ib_sg_dma_len(ibdev, sg);
@@ -1199,7 +1195,7 @@ static int srp_map_frwr(struct srp_map_state *state,
 			if (WARN_ONCE(k > target->sg_tablesize,
 				      "page_list_len %d > %d\n", k,
 				      target->sg_tablesize))
-				return -ENOMEM;
+				return -EINVAL;
 		}
 	}
 
@@ -2994,6 +2990,14 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 		pr_warn("cmd_per_lun = %d > can_queue = %d\n",
 			target->scsi_host->cmd_per_lun,
 			target->scsi_host->can_queue);
+
+	if (target->use_fast_reg) {
+		/* Avoid exceeding the maximum page list length with FRWR */
+		target->scsi_host->max_sectors = target->scsi_host->max_sectors
+			? min_t(unsigned short, target->scsi_host->max_sectors,
+				target->sg_tablesize) :
+			target->sg_tablesize;
+	}
 
 out:
 	kfree(options);

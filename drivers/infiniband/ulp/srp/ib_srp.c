@@ -1856,7 +1856,13 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	if (len < 0) {
 		shost_printk(KERN_ERR, target->scsi_host,
 			     PFX "Failed to map data\n");
-		goto err_iu;
+		if (len == -ENOMEM)
+			goto err_iu;
+		else {
+			scmnd->result = DID_ERROR << 16;
+			scmnd->scsi_done(scmnd);
+			return 0;
+		}
 	}
 
 	ib_dma_sync_single_for_device(dev, iu->dma, target->max_iu_len,

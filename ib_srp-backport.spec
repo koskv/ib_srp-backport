@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.2
+Version:	2.0.3
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -47,6 +47,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Sun Sep 08 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.3
+- Since IB symbols are not in the KABI, make this RPM dependent on the kernel
+  RPM it has been built against.
 * Mon Sep 02 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.2
 - Avoid offlining operational SCSI devices
 * Wed Aug 28 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.1

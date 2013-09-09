@@ -1191,10 +1191,17 @@ static int srp_map_frwr(struct srp_map_state *state,
 	       page_shift >= SRP_MIN_PAGE_SHIFT)
 		page_shift--;
 
-	if (WARN(page_shift < SRP_MIN_PAGE_SHIFT,
-		 "Invalid sg vector (page_shift = %d < %d)\n", page_shift,
-		 SRP_MIN_PAGE_SHIFT))
+	if (WARN_ONCE(page_shift < SRP_MIN_PAGE_SHIFT,
+		      "Invalid sg vector (page_shift = %d < %d; cap %#llx)\n",
+		      page_shift, SRP_MIN_PAGE_SHIFT, dev->page_size_cap)) {
+		for_each_sg(scat, sg, count, i) {
+			dma_addr = ib_sg_dma_address(ibdev, sg);
+			dma_len = ib_sg_dma_len(ibdev, sg);
+			pr_info("[%d] addr %#llx offset %#x len %#llx\n", i,
+				dma_addr, sg->offset, dma_len);
+		}
 		return -EINVAL;
+	}
 
 	page_mask = ~((1ULL << page_shift) - 1);
 
@@ -1205,8 +1212,16 @@ static int srp_map_frwr(struct srp_map_state *state,
 			page_list[k++] = (dma_addr + j) & page_mask;
 			if (WARN_ONCE(k > target->sg_tablesize,
 				      "page_list_len %d > %d\n", k,
-				      target->sg_tablesize))
+				      target->sg_tablesize)) {
+				for_each_sg(scat, sg, count, i) {
+					dma_addr = ib_sg_dma_address(ibdev, sg);
+					dma_len = ib_sg_dma_len(ibdev, sg);
+					pr_info("[%d] addr %#llx offset %#x"
+						" len %#llx\n", i,
+						dma_addr, sg->offset, dma_len);
+				}
 				return -EINVAL;
+			}
 		}
 	}
 

@@ -72,8 +72,10 @@ static unsigned int cmd_sg_entries;
 static unsigned int indirect_sg_entries;
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static int allow_ext_sg;
+static int prefer_frwr;
 #else
 static bool allow_ext_sg;
+static bool prefer_frwr;
 #endif
 static int topspin_workarounds = 1;
 
@@ -99,6 +101,15 @@ MODULE_PARM_DESC(allow_ext_sg,
 module_param(topspin_workarounds, int, 0444);
 MODULE_PARM_DESC(topspin_workarounds,
 		 "Enable workarounds for Topspin/Cisco SRP target bugs if != 0");
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+module_param(prefer_frwr, int, 0444);
+#else
+module_param(prefer_frwr, bool, 0444);
+#endif
+MODULE_PARM_DESC(prefer_frwr,
+		 "Whether to use FRWR if both FMR and FRWR are available");
+
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
 static struct kernel_param_ops srp_tmo_ops;
@@ -3246,6 +3257,7 @@ static void srp_add_one(struct ib_device *device)
 	struct ib_fmr_pool_param fmr_param;
 	struct srp_host *host;
 	int max_pages_per_fmr, fmr_page_shift, s, e, p;
+	bool have_fmr = false, have_frwr = false;
 
 	dev_attr = kmalloc(sizeof *dev_attr, GFP_KERNEL);
 	if (!dev_attr)
@@ -3262,11 +3274,12 @@ static void srp_add_one(struct ib_device *device)
 
 	if (device->alloc_fmr && device->dealloc_fmr && device->map_phys_fmr &&
 	    device->unmap_fmr) {
-		srp_dev->use_fast_reg = false;
-	} else if (dev_attr->device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS) {
+		have_fmr = true;
+	}
+	if (dev_attr->device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS) {
 		if (dev_attr->page_size_cap & SRP_MIN_PAGE_SIZE) {
-			srp_dev->use_fast_reg = true;
-		} else {
+			have_frwr = true;
+		} else if (!have_fmr) {
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 			dev_err(device->dma_device, "page size %d is not supported\n",
 				SRP_MIN_PAGE_SIZE);
@@ -3276,7 +3289,8 @@ static void srp_add_one(struct ib_device *device)
 #endif
 			goto free_dev;
 		}
-	} else {
+	}
+	if (!have_fmr && !have_frwr) {
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 		dev_err(device->dma_device, "neither FMR nor FRWR is supported\n");
 #else
@@ -3285,6 +3299,7 @@ static void srp_add_one(struct ib_device *device)
 		goto free_dev;
 	}
 
+	srp_dev->use_fast_reg = have_frwr && (!have_fmr || prefer_frwr);
 	srp_dev->page_size_cap = dev_attr->page_size_cap;
 
 	/*

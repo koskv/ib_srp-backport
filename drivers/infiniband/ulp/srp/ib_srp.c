@@ -1833,18 +1833,29 @@ static int srp_queuecommand(struct scsi_cmnd *scmnd,
 static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 {
 	struct srp_target_port *target = host_to_target(shost);
+	struct srp_rport *rport = target->rport;
 	struct srp_request *req;
 	struct srp_iu *iu;
 	struct srp_cmd *cmd;
 	struct ib_device *dev;
 	unsigned long flags;
 	int len, result;
+	const bool in_scsi_eh = !in_interrupt() && current == shost->ehandler;
+
+	/*
+	 * The SCSI EH thread is the only context from which srp_queuecommand()
+	 * can get invoked for blocked devices (SDEV_BLOCK /
+	 * SDEV_CREATED_BLOCK). Avoid racing with srp_reconnect_rport() by
+	 * locking the rport mutex if invoked from inside the SCSI EH.
+	 */
+	if (in_scsi_eh)
+		mutex_lock(&rport->mutex);
 
 	result = srp_chkready(target->rport);
 	if (unlikely(result)) {
 		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
-		return 0;
+		goto unlock_rport;
 	}
 
 	spin_lock_irqsave(&target->lock, flags);
@@ -1883,7 +1894,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 		else {
 			scmnd->result = DID_ERROR << 16;
 			scmnd->scsi_done(scmnd);
-			return 0;
+			goto unlock_rport;
 		}
 	}
 
@@ -1894,6 +1905,10 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 		shost_printk(KERN_ERR, target->scsi_host, PFX "Send failed\n");
 		goto err_unmap;
 	}
+
+unlock_rport:
+	if (in_scsi_eh)
+		mutex_unlock(&rport->mutex);
 
 	return 0;
 
@@ -1908,6 +1923,9 @@ err_iu:
 
 err_unlock:
 	spin_unlock_irqrestore(&target->lock, flags);
+
+	if (in_scsi_eh)
+		mutex_unlock(&rport->mutex);
 
 	return SCSI_MLQUEUE_HOST_BUSY;
 }
@@ -2268,6 +2286,7 @@ srp_change_queue_depth(struct scsi_device *sdev, int qdepth)
 static int srp_send_tsk_mgmt(struct srp_target_port *target,
 			     u64 req_tag, unsigned int lun, u8 func)
 {
+	struct srp_rport *rport = target->rport;
 	struct ib_device *dev = target->srp_host->srp_dev->dev;
 	struct srp_iu *iu;
 	struct srp_tsk_mgmt *tsk_mgmt;
@@ -2277,12 +2296,20 @@ static int srp_send_tsk_mgmt(struct srp_target_port *target,
 
 	init_completion(&target->tsk_mgmt_done);
 
+	/*
+	 * Lock the rport mutex to avoid that srp_create_target_ib() is 
+	 * invoked while a task management function is being sent.
+	 */
+	mutex_lock(&rport->mutex);
 	spin_lock_irq(&target->lock);
 	iu = __srp_get_tx_iu(target, SRP_IU_TSK_MGMT);
 	spin_unlock_irq(&target->lock);
 
-	if (!iu)
+	if (!iu) {
+		mutex_unlock(&rport->mutex);
+
 		return -1;
+	}
 
 	ib_dma_sync_single_for_cpu(dev, iu->dma, sizeof *tsk_mgmt,
 				   DMA_TO_DEVICE);
@@ -2299,8 +2326,11 @@ static int srp_send_tsk_mgmt(struct srp_target_port *target,
 				      DMA_TO_DEVICE);
 	if (srp_post_send(target, iu, sizeof *tsk_mgmt)) {
 		srp_put_tx_iu(target, iu, SRP_IU_TSK_MGMT);
+		mutex_unlock(&rport->mutex);
+
 		return -1;
 	}
+	mutex_unlock(&rport->mutex);
 
 	if (!wait_for_completion_timeout(&target->tsk_mgmt_done,
 					 msecs_to_jiffies(SRP_ABORT_TIMEOUT_MS)))

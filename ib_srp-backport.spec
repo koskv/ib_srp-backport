@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.4
+Version:	2.0.5
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -47,6 +47,13 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Sep 13 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.5
+- Fixed three bugs in the FRWR code: handle non-aligned SG_IO buffers properly;
+  avoid triggering an infinite loop if mapping fails; tell the SCSI mid-layer
+  what the maximum number of sectors is that is supported in FRWR mode.
+- Added prefer_frwr kernel module parameter (default value false aka use FMR).
+- Fix a race condition between the code for time-based reconnecting and the
+  SCSI EH.
 * Sun Sep 09 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.4
 - The RPM depends now on /boot/vmlinuz-\${kv} instead of /lib/modules/\${kv}.
 * Sun Sep 08 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.3

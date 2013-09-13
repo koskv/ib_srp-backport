@@ -1183,7 +1183,7 @@ static int srp_map_frwr(struct srp_map_state *state,
 		if (i != 0 && sg->offset != 0)
 			page_shift = min(page_shift,
 					 ffs(sg->offset) - 1);
-		if (i != count - 1)
+		if (i != 0 && i != count - 1)
 			page_shift = min(page_shift, ffs(dma_len) - 1);
 	}
 

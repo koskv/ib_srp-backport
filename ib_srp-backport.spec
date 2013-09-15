@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.5
+Version:	2.0.6
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -47,6 +47,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Sep 13 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.6
+- Made FRWR mapping code detect discontiguous buffers correctly.
 * Fri Sep 13 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.5
 - Fixed three bugs in the FRWR code: handle non-aligned SG_IO buffers properly;
   avoid triggering an infinite loop if mapping fails; tell the SCSI mid-layer

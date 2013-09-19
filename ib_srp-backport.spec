@@ -7,7 +7,6 @@ Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
 License:	GPLv2
 URL:		http://www.fusionio.com/
-BuildRequires:	gcc make
 Source:		%{kmod_name}-%{version}.tar.bz2
 AutoReq:	0
 Requires:	/sbin/depmod /usr/bin/find %{kernel_rpm}

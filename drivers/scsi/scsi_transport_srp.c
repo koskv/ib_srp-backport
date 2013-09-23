@@ -924,8 +924,8 @@ void srp_rport_del(struct srp_rport *rport)
 	transport_destroy_device(dev);
 
 	mutex_lock(&rport->mutex);
-	if (rport->state == SRP_RPORT_BLOCKED)
-		__rport_fail_io_fast(rport);
+	/* Disallow I/O after port removal has started. */
+	__rport_fail_io_fast(rport);
 	rport->deleted = true;
 	mutex_unlock(&rport->mutex);
 

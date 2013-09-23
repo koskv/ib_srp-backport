@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.6
+Version:	2.0.7
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -34,18 +34,38 @@ find $INSTALL_MOD_PATH/lib/modules -iname 'modules.*' -exec rm {} \;
 rm -rf $RPM_BUILD_ROOT
 
 %pre
-modprobe -r ib_srp
-modprobe -r scsi_transport_srp
+for m in ib_srp scsi_transport_srp; do
+    if [ -d /sys/module/$m ]; then
+	rmmod $m
+    fi
+done
 find /lib/modules/%{kversion} -name ib_srp.ko -o -name scsi_transport_srp.ko \
     | while read f; do rm -f "$f"; done
 
 %post
 depmod %{kversion}
 
+%preun
+for m in ib_srp scsi_transport_srp; do
+    if [ -d /sys/module/$m ]; then
+	rmmod $m
+    fi
+done
+
+%postun
+depmod %{kversion}
+
 %files
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Tue Sep 24 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.7
+- Changed default value of reconnect_delay from 10s into 20s.
+- Export source port GID (sgid) to sysfs.
+- Make srp_remove_host() terminate I/O.
+- Fixed sporadic I/O hang due to cable pull.
+- Fixed use-after-free triggered by cable pull or driver unload.
+- Added %%preun and %%postun sections in the spec file.
 * Fri Sep 13 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.6
 - Made FRWR mapping code detect discontiguous buffers correctly.
 * Fri Sep 13 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.5

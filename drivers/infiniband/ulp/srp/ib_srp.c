@@ -118,7 +118,7 @@ static int srp_tmo_get(char *buffer, const struct kernel_param *kp);
 static int srp_tmo_set(const char *val, const struct kernel_param *kp);
 #endif
 
-static int srp_reconnect_delay = 10;
+static int srp_reconnect_delay = 20;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
 module_param_cb(reconnect_delay, &srp_tmo_ops, &srp_reconnect_delay,
 		S_IRUGO | S_IWUSR);

@@ -2465,6 +2465,18 @@ static ssize_t show_pkey(struct device *dev, struct device_attribute *attr,
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_sgid(struct class_device *dev, char *buf)
+#else
+static ssize_t show_sgid(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+#endif
+{
+	struct srp_target_port *target = host_to_target(class_to_shost(dev));
+
+	return sprintf(buf, "%pI6\n", target->path.sgid.raw);
+}
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static ssize_t show_dgid(struct class_device *dev, char *buf)
 #else
 static ssize_t show_dgid(struct device *dev, struct device_attribute *attr,
@@ -2601,6 +2613,7 @@ static CLASS_DEVICE_ATTR(id_ext,	  S_IRUGO, show_id_ext,	         NULL);
 static CLASS_DEVICE_ATTR(ioc_guid,	  S_IRUGO, show_ioc_guid,	 NULL);
 static CLASS_DEVICE_ATTR(service_id,	  S_IRUGO, show_service_id,	 NULL);
 static CLASS_DEVICE_ATTR(pkey,            S_IRUGO, show_pkey,		 NULL);
+static CLASS_DEVICE_ATTR(sgid,	          S_IRUGO, show_sgid,		 NULL);
 static CLASS_DEVICE_ATTR(dgid,	          S_IRUGO, show_dgid,		 NULL);
 static CLASS_DEVICE_ATTR(orig_dgid,	  S_IRUGO, show_orig_dgid,	 NULL);
 static CLASS_DEVICE_ATTR(req_lim,         S_IRUGO, show_req_lim,         NULL);
@@ -2617,6 +2630,7 @@ static DEVICE_ATTR(id_ext,	    S_IRUGO, show_id_ext,	   NULL);
 static DEVICE_ATTR(ioc_guid,	    S_IRUGO, show_ioc_guid,	   NULL);
 static DEVICE_ATTR(service_id,	    S_IRUGO, show_service_id,	   NULL);
 static DEVICE_ATTR(pkey,	    S_IRUGO, show_pkey,		   NULL);
+static DEVICE_ATTR(sgid,	    S_IRUGO, show_sgid,		   NULL);
 static DEVICE_ATTR(dgid,	    S_IRUGO, show_dgid,		   NULL);
 static DEVICE_ATTR(orig_dgid,	    S_IRUGO, show_orig_dgid,	   NULL);
 static DEVICE_ATTR(req_lim,         S_IRUGO, show_req_lim,         NULL);
@@ -2636,6 +2650,7 @@ static struct class_device_attribute *srp_host_attrs[] = {
 	&class_device_attr_ioc_guid,
 	&class_device_attr_service_id,
 	&class_device_attr_pkey,
+	&class_device_attr_sgid,
 	&class_device_attr_dgid,
 	&class_device_attr_orig_dgid,
 	&class_device_attr_req_lim,
@@ -2655,6 +2670,7 @@ static struct device_attribute *srp_host_attrs[] = {
 	&dev_attr_ioc_guid,
 	&dev_attr_service_id,
 	&dev_attr_pkey,
+	&dev_attr_sgid,
 	&dev_attr_dgid,
 	&dev_attr_orig_dgid,
 	&dev_attr_req_lim,

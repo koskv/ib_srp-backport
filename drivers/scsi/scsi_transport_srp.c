@@ -540,12 +540,9 @@ int srp_reconnect_rport(struct srp_rport *rport)
 	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
 		 dev_name(&shost->shost_gendev), rport->state, res);
 	if (res == 0) {
-		mutex_unlock(&rport->mutex);
-
 		cancel_delayed_work(&rport->fast_io_fail_work);
 		cancel_delayed_work(&rport->dev_loss_work);
 
-		mutex_lock(&rport->mutex);
 		rport->failed_reconnects = 0;
 		srp_rport_set_state(rport, SRP_RPORT_RUNNING);
 		scsi_target_unblock(&shost->shost_gendev, SDEV_RUNNING);

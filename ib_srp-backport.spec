@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.7
+Version:	2.0.8
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -59,6 +59,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Sep 27 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.8
+- Avoid blocking commands for dev_loss_tmo seconds if reconnecting fails.
+- Reduce fail-over time.
 * Tue Sep 24 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.7
 - Changed default value of reconnect_delay from 10s into 20s.
 - Export source port GID (sgid) to sysfs.

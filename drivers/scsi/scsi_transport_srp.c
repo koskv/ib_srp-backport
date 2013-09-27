@@ -558,10 +558,12 @@ int srp_reconnect_rport(struct srp_rport *rport)
 			if (sdev->sdev_state == SDEV_OFFLINE)
 				sdev->sdev_state = SDEV_RUNNING;
 		spin_unlock_irq(shost->host_lock);
-	} else if (rport->state == SRP_RPORT_RUNNING) {
-		srp_rport_set_state(rport, SRP_RPORT_FAIL_FAST);
-		scsi_target_unblock(&shost->shost_gendev,
-				    SDEV_TRANSPORT_OFFLINE);
+	} else {
+		if (rport->state == SRP_RPORT_RUNNING)
+			srp_rport_set_state(rport, SRP_RPORT_FAIL_FAST);
+		if (rport->state != SRP_RPORT_BLOCKED)
+			scsi_target_unblock(&shost->shost_gendev,
+					    SDEV_TRANSPORT_OFFLINE);
 	}
 	mutex_unlock(&rport->mutex);
 

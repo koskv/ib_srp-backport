@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.8
+Version:	2.0.9
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -59,6 +59,10 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Wed Oct 02 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.9
+- Avoid that if reconnecting succeeds and the SCSI error handler later
+  on invokes eh_host_reset_handler that paths remain in the fail-fast
+  state and hence that failback fails.
 * Fri Sep 27 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.8
 - Avoid blocking commands for dev_loss_tmo seconds if reconnecting fails.
 - Reduce fail-over time.

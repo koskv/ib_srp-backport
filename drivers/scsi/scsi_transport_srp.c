@@ -67,6 +67,9 @@ struct srp_internal {
 	struct transport_container rport_attr_cont;
 };
 
+static void __rport_fail_io_fast(struct srp_rport *rport);
+static void __srp_start_tl_fail_timers(struct srp_rport *rport);
+
 #define to_srp_internal(tmpl) container_of(tmpl, struct srp_internal, t)
 
 #define	dev_to_rport(d)	container_of(d, struct srp_rport, dev)
@@ -558,12 +561,26 @@ int srp_reconnect_rport(struct srp_rport *rport)
 			if (sdev->sdev_state == SDEV_OFFLINE)
 				sdev->sdev_state = SDEV_RUNNING;
 		spin_unlock_irq(shost->host_lock);
-	} else {
-		if (rport->state == SRP_RPORT_RUNNING)
-			srp_rport_set_state(rport, SRP_RPORT_FAIL_FAST);
-		if (rport->state != SRP_RPORT_BLOCKED)
-			scsi_target_unblock(&shost->shost_gendev,
-					    SDEV_TRANSPORT_OFFLINE);
+	} else if (rport->state == SRP_RPORT_RUNNING) {
+		/*
+		 * One of the following happened:
+		 * - Reconnecting occurred with fast_io_fail off and with the
+		 *   reconnect timer running.
+		 * - eh_host_reset_handler was invoked from SCSI EH or via
+		 *   SG_IO with fast_io_fail off and reconnect timer running or
+		 *   with the reconnect timer not running.
+		 * In other words, it is neither guaranteed that the reconnect
+		 * timer is running nor that the dev_loss timer is running.
+		 * Mark the port as failed to speed up path failover and
+		 * start the TL failure timers if necessary.
+		 */
+		__rport_fail_io_fast(rport);
+		scsi_target_unblock(&shost->shost_gendev,
+				    SDEV_TRANSPORT_OFFLINE);
+		__srp_start_tl_fail_timers(rport);
+	} else if (rport->state != SRP_RPORT_BLOCKED) {
+		scsi_target_unblock(&shost->shost_gendev,
+				    SDEV_TRANSPORT_OFFLINE);
 	}
 	mutex_unlock(&rport->mutex);
 
@@ -668,18 +685,13 @@ static void rport_dev_loss_timedout(struct work_struct *work)
 	i->f->rport_delete(rport);
 }
 
-/**
- * srp_start_tl_fail_timers() - start the transport layer failure timers
- *
- * Start the transport layer fast I/O failure and device loss timers. Do not
- * modify a timer that was already started.
- */
-void srp_start_tl_fail_timers(struct srp_rport *rport)
+static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 {
 	struct Scsi_Host *shost = rport_to_shost(rport);
 	int fast_io_fail_tmo, dev_loss_tmo, delay;
 
-	mutex_lock(&rport->mutex);
+	lockdep_assert_held(&rport->mutex);
+
 	if (!rport->deleted) {
 		delay = rport->reconnect_delay;
 		fast_io_fail_tmo = rport->fast_io_fail_tmo;
@@ -712,6 +724,18 @@ void srp_start_tl_fail_timers(struct srp_rport *rport)
 		scsi_target_unblock(&shost->shost_gendev,
 				    SDEV_TRANSPORT_OFFLINE);
 	}
+}
+
+/**
+ * srp_start_tl_fail_timers() - start the transport layer failure timers
+ *
+ * Start the transport layer fast I/O failure and device loss timers. Do not
+ * modify a timer that was already started.
+ */
+void srp_start_tl_fail_timers(struct srp_rport *rport)
+{
+	mutex_lock(&rport->mutex);
+	__srp_start_tl_fail_timers(rport);
 	mutex_unlock(&rport->mutex);
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);

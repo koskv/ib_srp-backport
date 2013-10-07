@@ -25,24 +25,21 @@ After having installed the InfiniBand kernel drivers from your Linux
 distributor or from an OFED distribution, the ib_srp driver itself can be
 built and installed as follows on an RPM-based distribution:
 
-type yum >/dev/null 2>&1 && yum install kernel-devel make gcc rpm-build
+type yum    >/dev/null 2>&1 && yum install kernel-devel make gcc rpm-build
 type zypper >/dev/null 2>&1 && zypper install kernel-default-devel make gcc rpm
-make rpm
-rpm -U rpmbuilddir/RPMS/*/*.rpm
-
-For non-RPM based distributions such as Ubuntu, the procedure is as follows:
-
-modprobe -r ib_srp
-find /lib/modules/$(uname -r) \
-  -name ib_srp.ko -o -name scsi_transport_srp.ko | xargs rm -f
+type dpkg   >/dev/null 2>&1 && apt-get install "$(dpkg-query -S /boot/vmlinuz-$(uname -r) | sed 's/^linux-image/linux-headers/;s/:.*//')" make gcc rpm
 # When using OFED, edit the kernel Makefile with sed as follows:
 sed -i.orig \
     -e 's/^\(LINUXINCLUDE[[:blank:]]\+:=[[:blank:]]\+\)/\1$(PRE_CFLAGS) /' \
     /lib/modules/$(uname -r)/build/Makefile
 diff -u /lib/modules/$(uname -r)/build/Makefile{.orig,}
-make -s
-make -s install
-modprobe ib_srp
+make rpm
+if type dpkg >/dev/null 2>&1; then
+  rpm --nodeps -U rpmbuilddir/RPMS/*/*.rpm
+else
+  rpm -U rpmbuilddir/RPMS/*/*.rpm
+fi
+find /lib/modules/$(uname -r) -name scsi_transport_srp.ko -o -name ib_srp.ko
 
 Please note that just like any other out-of-tree InfiniBand kernel driver,
 this kernel driver has to be rebuilt and reinstalled after every kernel
@@ -55,14 +52,18 @@ After having installed the RPM, reverting back to the SRP initiator driver
 included in your Linux distribution is possible e.g. as follows:
 
 rpm -e ib_srp-backport-$(uname -r)
-k="$(rpm -qf /boot/vmlinuz-$(uname -r))"
-rpm -e --justdb --nodeps "$k" &&
-if type yum >/dev/null 2>&1; then
-    yum install -y "$k"
+if type dpkg >/dev/null 2>&1; then
+  k="$(dpkg-query -S /boot/vmlinuz-$(uname -r) | sed 's/:.*//')"
+  apt-get install --reinstall "$k"
 else
-    zypper install -y "$k"
+  k="$(rpm -qf /boot/vmlinuz-$(uname -r))"
+  rpm -e --justdb --nodeps "$k" && {
+    type yum    >/dev/null 2>&1 && yum install -y "$k";
+    type zypper >/dev/null 2>&1 && zypper install -y "$k";
+  }
 fi
 unset k
+find /lib/modules/$(uname -r) -name scsi_transport_srp.ko -o -name ib_srp.ko
 
 Testing
 -------

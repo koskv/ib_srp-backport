@@ -3124,6 +3124,8 @@ static ssize_t srp_create_target(struct device *dev,
 	target->queue_size	= SRP_DEFAULT_QUEUE_SIZE;
 	target->use_fast_reg	= srp_dev->use_fast_reg;
 
+	mutex_lock(&host->add_target_mutex);
+
 	ret = srp_parse_options(buf, target);
 	if (ret)
 		goto err;
@@ -3196,7 +3198,11 @@ static ssize_t srp_create_target(struct device *dev,
 	if (ret)
 		goto err_disconnect;
 
-	return count;
+	ret = count;
+
+out:
+	mutex_unlock(&host->add_target_mutex);
+	return ret;
 
 err_disconnect:
 	srp_disconnect_target(target);
@@ -3212,8 +3218,7 @@ err_free_mem:
 
 err:
 	scsi_host_put(target_host);
-
-	return ret;
+	goto out;
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -3269,6 +3274,7 @@ static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 	INIT_LIST_HEAD(&host->target_list);
 	spin_lock_init(&host->target_lock);
 	init_completion(&host->released);
+	mutex_init(&host->add_target_mutex);
 	host->srp_dev = device;
 	host->port = port;
 

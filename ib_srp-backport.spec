@@ -1,7 +1,7 @@
 %define kmod_name ib_srp-backport
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.9
+Version:	2.0.10
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -59,6 +59,11 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Tue Oct 29 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.10
+- Avoid that the initiator logs in twice to the same target port if the
+  same login string is written into the add_target sysfs attribute from
+  two different threads.
+- Avoid that failback can fail with reconnect_delay = fast_io_fail_tmo.
 * Wed Oct 02 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.9
 - Avoid that if reconnecting succeeds and the SCSI error handler later
   on invokes eh_host_reset_handler that paths remain in the fail-fast

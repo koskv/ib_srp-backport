@@ -654,7 +654,8 @@ static void rport_fast_io_fail_timedout(struct work_struct *work)
 		 dev_name(&shost->shost_gendev));
 
 	mutex_lock(&rport->mutex);
-	__rport_fail_io_fast(rport);
+	if (rport->state == SRP_RPORT_BLOCKED)
+		__rport_fail_io_fast(rport);
 	mutex_unlock(&rport->mutex);
 }
 

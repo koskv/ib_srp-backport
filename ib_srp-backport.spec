@@ -1,7 +1,17 @@
 %define kmod_name ib_srp-backport
+%define kversion %{expand:%%(echo ${KVER:-$(uname -r)})}
+%define kernel_rpm %{expand:%%(						\
+          krpm="$(rpm -qf /boot/vmlinuz-%{kversion} 2>/dev/null |	\
+                grep -v 'is not owned by any package' | head -n 1)";	\
+          if [ -n "$krpm" ]; then					\
+            echo "/boot/vmlinuz-%{kversion}";				\
+          else								\
+            echo "%{nil}";						\
+          fi;								\
+	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.10
+Version:	2.0.11
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -59,6 +69,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Nov 04 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.11
+- Made it possible to rebuild the source RPM.
 * Tue Oct 29 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.10
 - Avoid that the initiator logs in twice to the same target port if the
   same login string is written into the add_target sysfs attribute from

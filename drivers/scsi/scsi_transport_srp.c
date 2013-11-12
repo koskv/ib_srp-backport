@@ -88,9 +88,10 @@ static inline struct Scsi_Host *rport_to_shost(struct srp_rport *r)
  *
  * The combination of the three timeout parameters must be such that SCSI
  * commands are finished in a reasonable time. Hence do not allow the fast I/O
- * fail timeout to exceed SCSI_DEVICE_BLOCK_MAX_TIMEOUT. Furthermore, these
- * parameters must be such that multipath can detect failed paths. Hence do
- * not allow all three parameters to be disabled simultaneously.
+ * fail timeout to exceed SCSI_DEVICE_BLOCK_MAX_TIMEOUT nor allow dev_loss_tmo
+ * to exceed that limit if failing I/O fast has been disabled. Furthermore,
+ * these parameters must be such that multipath can detect failed paths. Hence
+ * do not allow all three parameters to be disabled simultaneously.
  */
 int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 {
@@ -99,6 +100,9 @@ int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 	if (reconnect_delay == 0)
 		return -EINVAL;
 	if (fast_io_fail_tmo > SCSI_DEVICE_BLOCK_MAX_TIMEOUT)
+		return -EINVAL;
+	if (fast_io_fail_tmo < 0 &&
+	    dev_loss_tmo > SCSI_DEVICE_BLOCK_MAX_TIMEOUT)
 		return -EINVAL;
 #if 0
 	if (dev_loss_tmo >= LONG_MAX / HZ)
@@ -564,8 +568,8 @@ int srp_reconnect_rport(struct srp_rport *rport)
 	} else if (rport->state == SRP_RPORT_RUNNING) {
 		/*
 		 * One of the following happened:
-		 * - Reconnecting occurred with fast_io_fail off and with the
-		 *   reconnect timer running.
+		 * - Reconnecting occurred with both fast_io_fail and
+		 *   dev_loss_tmo off and with the reconnect timer running.
 		 * - eh_host_reset_handler was invoked from SCSI EH or via
 		 *   SG_IO with fast_io_fail off and reconnect timer running or
 		 *   with the reconnect timer not running.
@@ -704,20 +708,20 @@ static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 			queue_delayed_work(system_long_wq,
 					   &rport->reconnect_work,
 					   1UL * delay * HZ);
-		if (fast_io_fail_tmo >= 0 &&
-		    srp_rport_set_state(rport, SRP_RPORT_BLOCKED) == 0) {
+		if (srp_rport_set_state(rport, SRP_RPORT_BLOCKED) == 0) {
 			pr_debug("%s new state: %d\n",
 				 dev_name(&shost->shost_gendev),
 				 rport->state);
 			scsi_target_block(&shost->shost_gendev);
-			queue_delayed_work(system_long_wq,
-					   &rport->fast_io_fail_work,
-					   1UL * fast_io_fail_tmo * HZ);
+			if (fast_io_fail_tmo >= 0)
+				queue_delayed_work(system_long_wq,
+						   &rport->fast_io_fail_work,
+						   1UL * fast_io_fail_tmo * HZ);
+			if (dev_loss_tmo >= 0)
+				queue_delayed_work(system_long_wq,
+						   &rport->dev_loss_work,
+						   1UL * dev_loss_tmo * HZ);
 		}
-		if (dev_loss_tmo >= 0)
-			queue_delayed_work(system_long_wq,
-					   &rport->dev_loss_work,
-					   1UL * dev_loss_tmo * HZ);
 	} else {
 		pr_debug("%s has already been deleted\n",
 			 dev_name(&shost->shost_gendev));

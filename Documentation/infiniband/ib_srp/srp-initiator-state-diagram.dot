@@ -3,19 +3,16 @@ digraph srp_initiator {
 	node [shape = circle];
 
 	running;
-	running_dlt	[ label = "running with\ndev_loss\ntimer started" ];
 	blocked;
 	failfast	[ label = "fail I/O\nfast" ];
 	lost;
 
-	running -> running_dlt	[ label = "IB RC error;\nfast_io_fail_tmo == off;\nrport not yet deleted" ];
-	running -> blocked	[ label = "IB RC error;\nfast_io_fail_tmo >= 0;\nrport not yet deleted" ];
+	running -> blocked	[ label = "IB RC error;\nrport not yet deleted" ];
 	blocked -> failfast	[ label = "fast_io_fail_tmo\nexpired or\nsrp_rport_del()" ];
+	blocked -> lost		[ label = "dev_loss_tmo\nexpired" ];
 	failfast -> lost	[ label = "dev_loss_tmo\nexpired" ];
-	running_dlt -> running	[ label = "reconnecting\nsucceeded" ];
 	blocked -> running	[ label = "reconnecting\nsucceeded" ];
 	failfast -> running	[ label = "reconnecting\nsucceeded" ];
-	running_dlt -> lost	[ label = "dev_loss_tmo\nexpired" ];
 
 	running -> failfast	[ label = "IB RC error after\nrport deletion" ];
 }

@@ -16,8 +16,8 @@ struct srp_rport_identifiers {
 /**
  * enum srp_rport_state - SRP transport layer state
  * @SRP_RPORT_RUNNING:   Transport layer operational.
- * @SRP_RPORT_BLOCKED:   Transport layer not operational; fast I/O fail timer
- *                       is running and I/O has been blocked.
+ * @SRP_RPORT_BLOCKED:   Transport layer not operational; fast I/O fail and/or
+ *                       device loss timers running and I/O has been blocked.
  * @SRP_RPORT_FAIL_FAST: Fast I/O fail timer has expired; fail I/O fast.
  * @SRP_RPORT_LOST:      Device loss timer has expired; port is being removed.
  */

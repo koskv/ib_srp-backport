@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.11
+Version:	2.0.12
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Nov 18 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.12
+- Block the SCSI devices upon TL error also if fast_io_fail_tmo = off.
 * Mon Nov 04 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.11
 - Made it possible to rebuild the source RPM.
 * Tue Oct 29 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.10

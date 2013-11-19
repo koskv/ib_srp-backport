@@ -2824,7 +2824,7 @@ enum {
 	SRP_OPT_SG_TABLESIZE	= 1 << 11,
 	SRP_OPT_COMP_VECTOR	= 1 << 12,
 	SRP_OPT_TL_RETRY_COUNT	= 1 << 13,
-	SRP_OPT_CAN_QUEUE	= 1 << 14,
+	SRP_OPT_QUEUE_SIZE	= 1 << 14,
 	SRP_OPT_USE_FAST_REG	= 1 << 15,
 	SRP_OPT_ALL		= (SRP_OPT_ID_EXT	|
 				   SRP_OPT_IOC_GUID	|
@@ -2852,7 +2852,7 @@ static const match_table_t srp_opt_tokens = {
 	{ SRP_OPT_SG_TABLESIZE,		"sg_tablesize=%u"	},
 	{ SRP_OPT_COMP_VECTOR,		"comp_vector=%u"	},
 	{ SRP_OPT_TL_RETRY_COUNT,	"tl_retry_count=%u"	},
-	{ SRP_OPT_CAN_QUEUE,		"can_queue=%d"		},
+	{ SRP_OPT_QUEUE_SIZE,		"queue_size=%d"		},
 	{ SRP_OPT_USE_FAST_REG,		"use_fast_reg=%d"	},
 	{ SRP_OPT_ERR,			NULL 			}
 };
@@ -2948,9 +2948,9 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 			target->scsi_host->max_sectors = token;
 			break;
 
-		case SRP_OPT_CAN_QUEUE:
+		case SRP_OPT_QUEUE_SIZE:
 			if (match_int(args, &token) || token < 1) {
-				pr_warn("bad can_queue parameter '%s'\n", p);
+				pr_warn("bad queue_size parameter '%s'\n", p);
 				goto out;
 			}
 			target->scsi_host->can_queue = token;
@@ -3065,7 +3065,7 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 
 	if (target->scsi_host->cmd_per_lun > target->scsi_host->can_queue
 	    && (opt_mask & SRP_OPT_MAX_CMD_PER_LUN))
-		pr_warn("cmd_per_lun = %d > can_queue = %d\n",
+		pr_warn("cmd_per_lun = %d > queue_size = %d\n",
 			target->scsi_host->cmd_per_lun,
 			target->scsi_host->can_queue);
 

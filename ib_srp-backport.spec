@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.12
+Version:	2.0.13
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.13
+- Fix a sporadic kernel crash triggered by path failover.
+- Renamed can_queue login parameter into queue_size.
 * Mon Nov 18 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.12
 - Block the SCSI devices upon TL error also if fast_io_fail_tmo = off.
 * Mon Nov 04 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.11

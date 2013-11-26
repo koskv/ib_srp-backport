@@ -488,106 +488,6 @@ invalid:
 }
 
 /**
- * scsi_request_fn_active() - number of kernel threads inside scsi_request_fn()
- */
-static int scsi_request_fn_active(struct Scsi_Host *shost)
-{
-	struct scsi_device *sdev;
-	struct request_queue *q;
-	int request_fn_active = 0;
-
-	shost_for_each_device(sdev, shost) {
-		q = sdev->request_queue;
-
-		spin_lock_irq(q->queue_lock);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) && \
-	!defined(CONFIG_SUSE_KERNEL)
-		/* See also commit 24faf6f6 */
-		request_fn_active += q->request_fn_active;
-#endif
-		spin_unlock_irq(q->queue_lock);
-	}
-
-	return request_fn_active;
-}
-
-/**
- * srp_reconnect_rport() - reconnect to an SRP target port
- *
- * Blocks SCSI command queueing before invoking reconnect() such that
- * queuecommand() won't be invoked concurrently with reconnect(). This is
- * important since a reconnect() implementation may reallocate resources
- * needed by queuecommand(). Please note that this function neither waits
- * until outstanding requests have finished nor tries to abort these. It is
- * the responsibility of the reconnect() function to finish outstanding
- * commands before reconnecting to the target port.
- */
-int srp_reconnect_rport(struct srp_rport *rport)
-{
-	struct Scsi_Host *shost = rport_to_shost(rport);
-	struct srp_internal *i = to_srp_internal(shost->transportt);
-	struct scsi_device *sdev;
-	int res;
-
-	pr_debug("SCSI host %s\n", dev_name(&shost->shost_gendev));
-
-	res = mutex_lock_interruptible(&rport->mutex);
-	if (res)
-		goto out;
-	scsi_target_block(&shost->shost_gendev);
-	while (scsi_request_fn_active(shost))
-		msleep(20);
-	res = i->f->reconnect(rport);
-	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
-		 dev_name(&shost->shost_gendev), rport->state, res);
-	if (res == 0) {
-		cancel_delayed_work(&rport->fast_io_fail_work);
-		cancel_delayed_work(&rport->dev_loss_work);
-
-		rport->failed_reconnects = 0;
-		srp_rport_set_state(rport, SRP_RPORT_RUNNING);
-		scsi_target_unblock(&shost->shost_gendev, SDEV_RUNNING);
-		/*
-		 * It can occur that after fast_io_fail_tmo expired and before
-		 * dev_loss_tmo expired that the SCSI error handler has
-		 * offlined one or more devices. scsi_target_unblock() doesn't
-		 * change the state of these devices into running, so do that
-		 * explicitly.
-		 */
-		spin_lock_irq(shost->host_lock);
-		__shost_for_each_device(sdev, shost)
-			if (sdev->sdev_state == SDEV_OFFLINE)
-				sdev->sdev_state = SDEV_RUNNING;
-		spin_unlock_irq(shost->host_lock);
-	} else if (rport->state == SRP_RPORT_RUNNING) {
-		/*
-		 * One of the following happened:
-		 * - Reconnecting occurred with both fast_io_fail and
-		 *   dev_loss_tmo off and with the reconnect timer running.
-		 * - eh_host_reset_handler was invoked from SCSI EH or via
-		 *   SG_IO with fast_io_fail off and reconnect timer running or
-		 *   with the reconnect timer not running.
-		 * In other words, it is neither guaranteed that the reconnect
-		 * timer is running nor that the dev_loss timer is running.
-		 * Mark the port as failed to speed up path failover and
-		 * start the TL failure timers if necessary.
-		 */
-		__rport_fail_io_fast(rport);
-		scsi_target_unblock(&shost->shost_gendev,
-				    SDEV_TRANSPORT_OFFLINE);
-		__srp_start_tl_fail_timers(rport);
-	} else if (rport->state != SRP_RPORT_BLOCKED) {
-		scsi_target_unblock(&shost->shost_gendev,
-				    SDEV_TRANSPORT_OFFLINE);
-	}
-	mutex_unlock(&rport->mutex);
-
-out:
-	return res;
-}
-EXPORT_SYMBOL(srp_reconnect_rport);
-
-/**
  * srp_reconnect_work() - reconnect and schedule a new attempt if necessary
  */
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -738,6 +638,106 @@ void srp_start_tl_fail_timers(struct srp_rport *rport)
 	mutex_unlock(&rport->mutex);
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
+
+/**
+ * scsi_request_fn_active() - number of kernel threads inside scsi_request_fn()
+ */
+static int scsi_request_fn_active(struct Scsi_Host *shost)
+{
+	struct scsi_device *sdev;
+	struct request_queue *q;
+	int request_fn_active = 0;
+
+	shost_for_each_device(sdev, shost) {
+		q = sdev->request_queue;
+
+		spin_lock_irq(q->queue_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) && \
+	!defined(CONFIG_SUSE_KERNEL)
+		/* See also commit 24faf6f6 */
+		request_fn_active += q->request_fn_active;
+#endif
+		spin_unlock_irq(q->queue_lock);
+	}
+
+	return request_fn_active;
+}
+
+/**
+ * srp_reconnect_rport() - reconnect to an SRP target port
+ *
+ * Blocks SCSI command queueing before invoking reconnect() such that
+ * queuecommand() won't be invoked concurrently with reconnect(). This is
+ * important since a reconnect() implementation may reallocate resources
+ * needed by queuecommand(). Please note that this function neither waits
+ * until outstanding requests have finished nor tries to abort these. It is
+ * the responsibility of the reconnect() function to finish outstanding
+ * commands before reconnecting to the target port.
+ */
+int srp_reconnect_rport(struct srp_rport *rport)
+{
+	struct Scsi_Host *shost = rport_to_shost(rport);
+	struct srp_internal *i = to_srp_internal(shost->transportt);
+	struct scsi_device *sdev;
+	int res;
+
+	pr_debug("SCSI host %s\n", dev_name(&shost->shost_gendev));
+
+	res = mutex_lock_interruptible(&rport->mutex);
+	if (res)
+		goto out;
+	scsi_target_block(&shost->shost_gendev);
+	while (scsi_request_fn_active(shost))
+		msleep(20);
+	res = i->f->reconnect(rport);
+	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
+		 dev_name(&shost->shost_gendev), rport->state, res);
+	if (res == 0) {
+		cancel_delayed_work(&rport->fast_io_fail_work);
+		cancel_delayed_work(&rport->dev_loss_work);
+
+		rport->failed_reconnects = 0;
+		srp_rport_set_state(rport, SRP_RPORT_RUNNING);
+		scsi_target_unblock(&shost->shost_gendev, SDEV_RUNNING);
+		/*
+		 * It can occur that after fast_io_fail_tmo expired and before
+		 * dev_loss_tmo expired that the SCSI error handler has
+		 * offlined one or more devices. scsi_target_unblock() doesn't
+		 * change the state of these devices into running, so do that
+		 * explicitly.
+		 */
+		spin_lock_irq(shost->host_lock);
+		__shost_for_each_device(sdev, shost)
+			if (sdev->sdev_state == SDEV_OFFLINE)
+				sdev->sdev_state = SDEV_RUNNING;
+		spin_unlock_irq(shost->host_lock);
+	} else if (rport->state == SRP_RPORT_RUNNING) {
+		/*
+		 * One of the following happened:
+		 * - Reconnecting occurred with both fast_io_fail and
+		 *   dev_loss_tmo off and with the reconnect timer running.
+		 * - eh_host_reset_handler was invoked from SCSI EH or via
+		 *   SG_IO with fast_io_fail off and reconnect timer running or
+		 *   with the reconnect timer not running.
+		 * In other words, it is neither guaranteed that the reconnect
+		 * timer is running nor that the dev_loss timer is running.
+		 * Mark the port as failed to speed up path failover and
+		 * start the TL failure timers if necessary.
+		 */
+		__rport_fail_io_fast(rport);
+		scsi_target_unblock(&shost->shost_gendev,
+				    SDEV_TRANSPORT_OFFLINE);
+		__srp_start_tl_fail_timers(rport);
+	} else if (rport->state != SRP_RPORT_BLOCKED) {
+		scsi_target_unblock(&shost->shost_gendev,
+				    SDEV_TRANSPORT_OFFLINE);
+	}
+	mutex_unlock(&rport->mutex);
+
+out:
+	return res;
+}
+EXPORT_SYMBOL(srp_reconnect_rport);
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 /**

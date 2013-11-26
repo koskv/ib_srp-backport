@@ -1753,7 +1753,7 @@ static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
 static void srp_recv_completion(struct ib_cq *cq, void *target_ptr)
 {
 	struct srp_target_port *target = target_ptr;
-	struct ib_wc* const wc = target->recv_wc;
+	struct ib_wc *const wc = target->recv_wc;
 	int i, n;
 
 	do {
@@ -2303,7 +2303,7 @@ static int srp_send_tsk_mgmt(struct srp_target_port *target,
 	init_completion(&target->tsk_mgmt_done);
 
 	/*
-	 * Lock the rport mutex to avoid that srp_create_target_ib() is 
+	 * Lock the rport mutex to avoid that srp_create_target_ib() is
 	 * invoked while a task management function is being sent.
 	 */
 	mutex_lock(&rport->mutex);

@@ -254,6 +254,23 @@ static CLASS_DEVICE_ATTR(state, S_IRUGO, show_srp_rport_state, NULL);
 static DEVICE_ATTR(state, S_IRUGO, show_srp_rport_state, NULL);
 #endif
 
+static ssize_t srp_show_tmo(char *buf, int tmo)
+{
+	return tmo >= 0 ? sprintf(buf, "%d\n", tmo) : sprintf(buf, "off\n");
+}
+
+static int srp_parse_tmo(int *tmo, const char *buf)
+{
+	int res = 0;
+
+	if (strncmp(buf, "off", 3) != 0)
+		res = kstrtoint(buf, 0, tmo);
+	else
+		*tmo = -1;
+
+	return res;
+}
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static ssize_t show_reconnect_delay(struct class_device *dev, char *buf)
 #else
@@ -263,10 +280,7 @@ static ssize_t show_reconnect_delay(struct device *dev,
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
-	if (rport->reconnect_delay >= 0)
-		return sprintf(buf, "%d\n", rport->reconnect_delay);
-	else
-		return sprintf(buf, "off\n");
+	return srp_show_tmo(buf, rport->reconnect_delay);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -281,13 +295,9 @@ static ssize_t store_reconnect_delay(struct device *dev,
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 	int res, delay;
 
-	if (strncmp(buf, "off", 3) != 0) {
-		res = kstrtoint(buf, 0, &delay);
-		if (res)
-			goto out;
-	} else {
-		delay = -1;
-	}
+	res = srp_parse_tmo(&delay, buf);
+	if (res)
+		goto out;
 	res = srp_tmo_valid(delay, rport->fast_io_fail_tmo,
 			    rport->dev_loss_tmo);
 	if (res)
@@ -345,10 +355,7 @@ static ssize_t show_srp_rport_fast_io_fail_tmo(struct device *dev,
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
-	if (rport->fast_io_fail_tmo >= 0)
-		return sprintf(buf, "%d\n", rport->fast_io_fail_tmo);
-	else
-		return sprintf(buf, "off\n");
+	return srp_show_tmo(buf, rport->fast_io_fail_tmo);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -364,13 +371,9 @@ static ssize_t store_srp_rport_fast_io_fail_tmo(struct device *dev,
 	int res;
 	int fast_io_fail_tmo;
 
-	if (strncmp(buf, "off", 3) != 0) {
-		res = kstrtoint(buf, 0, &fast_io_fail_tmo);
-		if (res)
-			goto out;
-	} else {
-		fast_io_fail_tmo = -1;
-	}
+	res = srp_parse_tmo(&fast_io_fail_tmo, buf);
+	if (res)
+		goto out;
 	res = srp_tmo_valid(rport->reconnect_delay, fast_io_fail_tmo,
 			    rport->dev_loss_tmo);
 	if (res)
@@ -402,10 +405,7 @@ static ssize_t show_srp_rport_dev_loss_tmo(struct device *dev,
 {
 	struct srp_rport *rport = transport_class_to_srp_rport(dev);
 
-	if (rport->dev_loss_tmo >= 0)
-		return sprintf(buf, "%d\n", rport->dev_loss_tmo);
-	else
-		return sprintf(buf, "off\n");
+	return srp_show_tmo(buf, rport->dev_loss_tmo);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -421,13 +421,9 @@ static ssize_t store_srp_rport_dev_loss_tmo(struct device *dev,
 	int res;
 	int dev_loss_tmo;
 
-	if (strncmp(buf, "off", 3) != 0) {
-		res = kstrtoint(buf, 0, &dev_loss_tmo);
-		if (res)
-			goto out;
-	} else {
-		dev_loss_tmo = -1;
-	}
+	res = srp_parse_tmo(&dev_loss_tmo, buf);
+	if (res)
+		goto out;
 	res = srp_tmo_valid(rport->reconnect_delay, rport->fast_io_fail_tmo,
 			    dev_loss_tmo);
 	if (res)

@@ -86,12 +86,12 @@ static inline struct Scsi_Host *rport_to_shost(struct srp_rport *r)
 /**
  * srp_tmo_valid() - check timeout combination validity
  *
- * The combination of the three timeout parameters must be such that SCSI
- * commands are finished in a reasonable time. Hence do not allow the fast I/O
- * fail timeout to exceed SCSI_DEVICE_BLOCK_MAX_TIMEOUT nor allow dev_loss_tmo
- * to exceed that limit if failing I/O fast has been disabled. Furthermore,
- * these parameters must be such that multipath can detect failed paths. Hence
- * do not allow all three parameters to be disabled simultaneously.
+ * The combination of the timeout parameters must be such that SCSI commands
+ * are finished in a reasonable time. Hence do not allow the fast I/O fail
+ * timeout to exceed SCSI_DEVICE_BLOCK_MAX_TIMEOUT nor allow dev_loss_tmo to
+ * exceed that limit if failing I/O fast has been disabled. Furthermore, these
+ * parameters must be such that multipath can detect failed paths timely.
+ * Hence do not allow all three parameters to be disabled simultaneously.
  */
 int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 {
@@ -104,10 +104,8 @@ int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo, int dev_loss_tmo)
 	if (fast_io_fail_tmo < 0 &&
 	    dev_loss_tmo > SCSI_DEVICE_BLOCK_MAX_TIMEOUT)
 		return -EINVAL;
-#if 0
 	if (dev_loss_tmo >= LONG_MAX / HZ)
 		return -EINVAL;
-#endif
 	if (fast_io_fail_tmo >= 0 && dev_loss_tmo >= 0 &&
 	    fast_io_fail_tmo >= dev_loss_tmo)
 		return -EINVAL;

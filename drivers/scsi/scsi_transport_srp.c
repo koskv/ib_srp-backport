@@ -687,7 +687,7 @@ static void rport_dev_loss_timedout(struct work_struct *work)
 static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 {
 	struct Scsi_Host *shost = rport_to_shost(rport);
-	int fast_io_fail_tmo, dev_loss_tmo, delay;
+	int delay, fast_io_fail_tmo, dev_loss_tmo;
 
 	lockdep_assert_held(&rport->mutex);
 

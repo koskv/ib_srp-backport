@@ -1033,8 +1033,8 @@ static int srp_map_finish_fmr(struct srp_map_state *state,
 		return 0;
 
 	if (state->fmr.npages == 1) {
-		srp_map_desc(state, state->fmr.base_dma_addr, state->fmr.fmr_len,
-			     target->rkey);
+		srp_map_desc(state, state->fmr.base_dma_addr,
+			     state->fmr.fmr_len, target->rkey);
 		state->fmr.npages = state->fmr.fmr_len = 0;
 		return 0;
 	}

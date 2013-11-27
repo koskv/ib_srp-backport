@@ -508,19 +508,11 @@ static void srp_reconnect_work(struct work_struct *work)
 		shost_printk(KERN_ERR, shost,
 			     "reconnect attempt %d failed (%d)\n",
 			     ++rport->failed_reconnects, res);
-
-		mutex_lock(&rport->mutex);
 		delay = rport->reconnect_delay *
 			min(100, max(1, rport->failed_reconnects - 10));
-		if (!rport->deleted) {
-			if (delay > 0)
-				queue_delayed_work(system_long_wq,
-						   &rport->reconnect_work,
-						   delay * HZ);
-		} else {
-			__rport_fail_io_fast(rport);
-		}
-		mutex_unlock(&rport->mutex);
+		if (delay > 0)
+			queue_delayed_work(system_long_wq,
+					   &rport->reconnect_work, delay * HZ);
 	}
 }
 
@@ -775,6 +767,16 @@ static void srp_rport_release(struct device *dev)
 {
 	struct srp_rport *rport = dev_to_rport(dev);
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	cancel_work_sync(&rport->reconnect_work);
+	cancel_work_sync(&rport->fast_io_fail_work);
+	cancel_work_sync(&rport->dev_loss_work);
+#else
+	cancel_delayed_work_sync(&rport->reconnect_work);
+	cancel_delayed_work_sync(&rport->fast_io_fail_work);
+	cancel_delayed_work_sync(&rport->dev_loss_work);
+#endif
+
 	put_device(dev->parent);
 	kfree(rport);
 }
@@ -952,16 +954,6 @@ void srp_rport_del(struct srp_rport *rport)
 	__rport_fail_io_fast(rport);
 	rport->deleted = true;
 	mutex_unlock(&rport->mutex);
-
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-	cancel_work_sync(&rport->reconnect_work);
-	cancel_work_sync(&rport->fast_io_fail_work);
-	cancel_work_sync(&rport->dev_loss_work);
-#else
-	cancel_delayed_work_sync(&rport->reconnect_work);
-	cancel_delayed_work_sync(&rport->fast_io_fail_work);
-	cancel_delayed_work_sync(&rport->dev_loss_work);
-#endif
 
 	put_device(dev);
 }

@@ -591,37 +591,27 @@ static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 
 	lockdep_assert_held(&rport->mutex);
 
-	if (!rport->deleted) {
-		delay = rport->reconnect_delay;
-		fast_io_fail_tmo = rport->fast_io_fail_tmo;
-		dev_loss_tmo = rport->dev_loss_tmo;
-		pr_debug("%s current state: %d\n",
-			 dev_name(&shost->shost_gendev), rport->state);
+	delay = rport->reconnect_delay;
+	fast_io_fail_tmo = rport->fast_io_fail_tmo;
+	dev_loss_tmo = rport->dev_loss_tmo;
+	pr_debug("%s current state: %d\n", dev_name(&shost->shost_gendev),
+		 rport->state);
 
-		if (delay > 0)
+	if (delay > 0)
+		queue_delayed_work(system_long_wq, &rport->reconnect_work,
+				   1UL * delay * HZ);
+	if (srp_rport_set_state(rport, SRP_RPORT_BLOCKED) == 0) {
+		pr_debug("%s new state: %d\n", dev_name(&shost->shost_gendev),
+			 rport->state);
+		scsi_target_block(&shost->shost_gendev);
+		if (fast_io_fail_tmo >= 0)
 			queue_delayed_work(system_long_wq,
-					   &rport->reconnect_work,
-					   1UL * delay * HZ);
-		if (srp_rport_set_state(rport, SRP_RPORT_BLOCKED) == 0) {
-			pr_debug("%s new state: %d\n",
-				 dev_name(&shost->shost_gendev),
-				 rport->state);
-			scsi_target_block(&shost->shost_gendev);
-			if (fast_io_fail_tmo >= 0)
-				queue_delayed_work(system_long_wq,
-						   &rport->fast_io_fail_work,
-						   1UL * fast_io_fail_tmo * HZ);
-			if (dev_loss_tmo >= 0)
-				queue_delayed_work(system_long_wq,
-						   &rport->dev_loss_work,
-						   1UL * dev_loss_tmo * HZ);
-		}
-	} else {
-		pr_debug("%s has already been deleted\n",
-			 dev_name(&shost->shost_gendev));
-		srp_rport_set_state(rport, SRP_RPORT_FAIL_FAST);
-		scsi_target_unblock(&shost->shost_gendev,
-				    SDEV_TRANSPORT_OFFLINE);
+					   &rport->fast_io_fail_work,
+					   1UL * fast_io_fail_tmo * HZ);
+		if (dev_loss_tmo >= 0)
+			queue_delayed_work(system_long_wq,
+					   &rport->dev_loss_work,
+					   1UL * dev_loss_tmo * HZ);
 	}
 }
 
@@ -634,7 +624,8 @@ static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 void srp_start_tl_fail_timers(struct srp_rport *rport)
 {
 	mutex_lock(&rport->mutex);
-	__srp_start_tl_fail_timers(rport);
+	if (!rport->deleted)
+		__srp_start_tl_fail_timers(rport);
 	mutex_unlock(&rport->mutex);
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
@@ -766,16 +757,6 @@ static enum blk_eh_timer_return srp_timed_out(struct scsi_cmnd *scmd)
 static void srp_rport_release(struct device *dev)
 {
 	struct srp_rport *rport = dev_to_rport(dev);
-
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-	cancel_work_sync(&rport->reconnect_work);
-	cancel_work_sync(&rport->fast_io_fail_work);
-	cancel_work_sync(&rport->dev_loss_work);
-#else
-	cancel_delayed_work_sync(&rport->reconnect_work);
-	cancel_delayed_work_sync(&rport->fast_io_fail_work);
-	cancel_delayed_work_sync(&rport->dev_loss_work);
-#endif
 
 	put_device(dev->parent);
 	kfree(rport);
@@ -949,12 +930,6 @@ void srp_rport_del(struct srp_rport *rport)
 	device_del(dev);
 	transport_destroy_device(dev);
 
-	mutex_lock(&rport->mutex);
-	/* Disallow I/O after port removal has started. */
-	__rport_fail_io_fast(rport);
-	rport->deleted = true;
-	mutex_unlock(&rport->mutex);
-
 	put_device(dev);
 }
 EXPORT_SYMBOL_GPL(srp_rport_del);
@@ -978,6 +953,33 @@ void srp_remove_host(struct Scsi_Host *shost)
 	device_for_each_child(&shost->shost_gendev, NULL, do_srp_rport_del);
 }
 EXPORT_SYMBOL_GPL(srp_remove_host);
+
+/**
+ * srp_stop_rport_timers - stop the transport layer recovery timers
+ *
+ * Must be called after srp_remove_host() and scsi_remove_host(). The caller
+ * must hold a reference on the rport (rport->dev) and on the SCSI host
+ * (rport->dev.parent).
+ */
+void srp_stop_rport_timers(struct srp_rport *rport)
+{
+	mutex_lock(&rport->mutex);
+	if (rport->state == SRP_RPORT_BLOCKED)
+		__rport_fail_io_fast(rport);
+	rport->deleted = true;
+	mutex_unlock(&rport->mutex);
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+	cancel_work_sync(&rport->reconnect_work);
+	cancel_work_sync(&rport->fast_io_fail_work);
+	cancel_work_sync(&rport->dev_loss_work);
+#else
+	cancel_delayed_work_sync(&rport->reconnect_work);
+	cancel_delayed_work_sync(&rport->fast_io_fail_work);
+	cancel_delayed_work_sync(&rport->dev_loss_work);
+#endif
+}
+EXPORT_SYMBOL_GPL(srp_stop_rport_timers);
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
 static int srp_tsk_mgmt_response(struct Scsi_Host *shost, u64 nexus, u64 tm_id,

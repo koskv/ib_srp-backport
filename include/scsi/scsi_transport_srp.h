@@ -95,6 +95,7 @@ extern int srp_tmo_valid(int reconnect_delay, int fast_io_fail_tmo,
 extern int srp_reconnect_rport(struct srp_rport *rport);
 extern void srp_start_tl_fail_timers(struct srp_rport *rport);
 extern void srp_remove_host(struct Scsi_Host *);
+extern void srp_stop_rport_timers(struct srp_rport *rport);
 
 /**
  * srp_chkready() - evaluate the transport layer state before I/O

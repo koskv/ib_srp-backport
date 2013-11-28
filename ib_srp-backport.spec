@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.13
+Version:	2.0.14
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,10 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.14
+- FRWR mode: avoid that paths start to bounce after a cable reconnect.
+- Fixed a regression introduced in v2.0.13 that sometimes caused multipathd
+  to stall for two minutes.
 * Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.13
 - Fix a sporadic kernel crash triggered by path failover.
 - Renamed can_queue login parameter into queue_size.

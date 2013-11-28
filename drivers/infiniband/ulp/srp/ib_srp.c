@@ -992,8 +992,18 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		struct srp_request *req = &target->req_ring[i];
+		/*
+		 * Avoid that srp_finish_req() tries to use the QP since
+		 * QP reallocation could have failed.
+		 */
+		req->frwr.rkey_valid = false;
 		srp_finish_req(target, req, DID_RESET << 16);
 	}
+
+	/* Reallocate requests to reset the MR state in FRWR mode. */
+	srp_free_req_data(target);
+	if (ret == 0)
+		ret = srp_alloc_req_data(target);
 
 	INIT_LIST_HEAD(&target->free_tx);
 	for (i = 0; i < target->queue_size; ++i)
@@ -1726,17 +1736,15 @@ static int srp_req_idx(struct srp_target_port *target, struct srp_request *req)
 static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
 			      bool send_err, struct srp_target_port *target)
 {
-	int i = srp_req_idx(target, (void *)(uintptr_t)(wr_id & ~1ULL));
-
-	if (wr_id & 1) {
-		shost_printk(KERN_ERR, target->scsi_host,
-			     "LOCAL_INV for req [%d] failed with status %d\n",
-			     i, wc_status);
-		return;
-	}
+	int i;
 
 	if (target->connected && !target->qp_in_error) {
-		if (i >= 0) {
+		i = srp_req_idx(target, (void *)(uintptr_t)(wr_id & ~1ULL));
+		if (wr_id & 1) {
+			shost_printk(KERN_ERR, target->scsi_host,
+				     "LOCAL_INV for req [%d] failed with status %d\n",
+				     i, wc_status);
+		} else if (i >= 0) {
 			shost_printk(KERN_ERR, target->scsi_host,
 				     "FAST_REG_MR [%d] failed status %d\n", i,
 				     wc_status);

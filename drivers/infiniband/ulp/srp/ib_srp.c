@@ -943,6 +943,7 @@ static void srp_finish_req(struct srp_target_port *target,
 
 	if (scmnd) {
 		srp_free_req(target, req, scmnd, 0);
+		scmnd->request->cmd_flags |= REQ_QUIET;
 		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
 	}
@@ -1868,6 +1869,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 
 	result = srp_chkready(target->rport);
 	if (unlikely(result)) {
+		scmnd->request->cmd_flags |= REQ_QUIET;
 		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
 		goto unlock_rport;
@@ -2372,6 +2374,7 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 	else
 		ret = FAILED;
 	srp_free_req(target, req, scmnd, 0);
+	scmnd->request->cmd_flags |= REQ_QUIET;
 	scmnd->result = DID_ABORT << 16;
 	scmnd->scsi_done(scmnd);
 

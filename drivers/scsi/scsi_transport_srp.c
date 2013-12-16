@@ -597,6 +597,8 @@ static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 	pr_debug("%s current state: %d\n", dev_name(&shost->shost_gendev),
 		 rport->state);
 
+	if (rport->state == SRP_RPORT_LOST)
+		return;
 	if (delay > 0)
 		queue_delayed_work(system_long_wq, &rport->reconnect_work,
 				   1UL * delay * HZ);
@@ -624,8 +626,7 @@ static void __srp_start_tl_fail_timers(struct srp_rport *rport)
 void srp_start_tl_fail_timers(struct srp_rport *rport)
 {
 	mutex_lock(&rport->mutex);
-	if (!rport->deleted)
-		__srp_start_tl_fail_timers(rport);
+	__srp_start_tl_fail_timers(rport);
 	mutex_unlock(&rport->mutex);
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
@@ -690,7 +691,7 @@ int srp_reconnect_rport(struct srp_rport *rport)
 	scsi_target_block(&shost->shost_gendev);
 	while (scsi_request_fn_active(shost))
 		msleep(20);
-	res = i->f->reconnect(rport);
+	res = rport->state != SRP_RPORT_LOST ? i->f->reconnect(rport) : -ENODEV;
 	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
 		 dev_name(&shost->shost_gendev), rport->state, res);
 	if (res == 0) {
@@ -966,7 +967,7 @@ void srp_stop_rport_timers(struct srp_rport *rport)
 	mutex_lock(&rport->mutex);
 	if (rport->state == SRP_RPORT_BLOCKED)
 		__rport_fail_io_fast(rport);
-	rport->deleted = true;
+	srp_rport_set_state(rport, SRP_RPORT_LOST);
 	mutex_unlock(&rport->mutex);
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)

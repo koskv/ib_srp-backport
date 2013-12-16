@@ -16,10 +16,10 @@ struct srp_rport_identifiers {
 /**
  * enum srp_rport_state - SRP transport layer state
  * @SRP_RPORT_RUNNING:   Transport layer operational.
- * @SRP_RPORT_BLOCKED:   Transport layer not operational; fast I/O fail and/or
- *                       device loss timers running and I/O has been blocked.
+ * @SRP_RPORT_BLOCKED:   Transport layer not operational; fast I/O fail timer
+ *                       is running and I/O has been blocked.
  * @SRP_RPORT_FAIL_FAST: Fast I/O fail timer has expired; fail I/O fast.
- * @SRP_RPORT_LOST:      Device loss timer has expired; port is being removed.
+ * @SRP_RPORT_LOST:      Port is being removed.
  */
 enum srp_rport_state {
 	SRP_RPORT_RUNNING,
@@ -30,8 +30,9 @@ enum srp_rport_state {
 
 /**
  * struct srp_rport
- * @mutex:   Protects against concurrent rport fast_io_fail / dev_loss_tmo /
- *   reconnect activity.
+ * @lld_data: LLD private data.
+ * @mutex:    Protects against concurrent rport reconnect / fast_io_fail /
+ *   dev_loss_tmo activity.
  */
 struct srp_rport {
 	/* for initiator and target drivers */
@@ -43,11 +44,10 @@ struct srp_rport {
 
 	/* for initiator drivers */
 
-	void			*lld_data;	/* LLD private data */
+	void			*lld_data;
 
 	struct mutex		mutex;
 	enum srp_rport_state	state;
-	bool			deleted;
 	int			reconnect_delay;
 	int			failed_reconnects;
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -66,6 +66,20 @@ struct srp_rport {
 #endif
 };
 
+/**
+ * struct srp_function_template
+ * @has_rport_state: Whether or not to create the state, fast_io_fail_tmo and
+ *     dev_loss_tmo sysfs attribute for an rport.
+ * @reset_timer_if_blocked: Whether or srp_timed_out() should reset the command
+ *     timer if the device on which it has been queued is blocked.
+ * @reconnect_delay: If not NULL, points to the default reconnect_delay value.
+ * @fast_io_fail_tmo: If not NULL, points to the default fast_io_fail_tmo value.
+ * @dev_loss_tmo: If not NULL, points to the default dev_loss_tmo value.
+ * @reconnect: Callback function for reconnecting to the target. See also
+ *     srp_reconnect_rport().
+ * @terminate_rport_io: Callback function for terminating all outstanding I/O
+ *     requests for an rport.
+ */
 struct srp_function_template {
 	/* for initiator drivers */
 	bool has_rport_state;
@@ -100,8 +114,9 @@ extern void srp_stop_rport_timers(struct srp_rport *rport);
 /**
  * srp_chkready() - evaluate the transport layer state before I/O
  *
- * Returns a SCSI result code that can be returned by the LLD. The role of
- * this function is similar to that of fc_remote_port_chkready().
+ * Returns a SCSI result code that can be returned by the LLD queuecommand()
+ * implementation. The role of this function is similar to that of
+ * fc_remote_port_chkready().
  */
 static inline int srp_chkready(struct srp_rport *rport)
 {

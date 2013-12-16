@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.14
+Version:	2.0.15
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Dec 16 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.15
+- Fail SCSI commands silently that failed because of a transport layer
+  error.
 * Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.14
 - FRWR mode: avoid that paths start to bounce after a cable reconnect.
 - Fixed a regression introduced in v2.0.13 that sometimes caused multipathd

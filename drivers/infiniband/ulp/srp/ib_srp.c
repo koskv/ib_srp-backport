@@ -1904,9 +1904,9 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	if (len < 0) {
 		shost_printk(KERN_ERR, target->scsi_host,
 			     PFX "Failed to map data\n");
-		if (len == -ENOMEM)
+		if (len == -ENOMEM) {
 			goto err_iu;
-		else {
+		} else {
 			scmnd->result = DID_ERROR << 16;
 			scmnd->scsi_done(scmnd);
 			goto unlock_rport;

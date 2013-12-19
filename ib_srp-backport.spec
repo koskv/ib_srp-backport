@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.15
+Version:	2.0.16
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,10 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Dec 19 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.16
+- Avoid that the process that writes into the sysfs attribute "add_target"
+  hangs if a transport layer error occurs after the SRP login request has
+  been sent and before the SRP login reponse has been received.
 * Mon Dec 16 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.15
 - Fail SCSI commands silently that failed because of a transport layer
   error.

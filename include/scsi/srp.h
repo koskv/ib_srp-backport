@@ -58,15 +58,23 @@ enum {
 	SRP_AER_RSP	= 0x42
 };
 
+/*
+ * Note: %SRP_BUF_FORMAT_IMM is an extension of SRP r16a.
+ */
 enum {
 	SRP_BUF_FORMAT_DIRECT	= 1 << 1,
-	SRP_BUF_FORMAT_INDIRECT	= 1 << 2
+	SRP_BUF_FORMAT_INDIRECT	= 1 << 2,
+	SRP_BUF_FORMAT_IMM	= 1 << 3,
 };
 
+/*
+ * Note: %SRP_DATA_DESC_IMM is an extension of SRP r16a.
+ */
 enum {
 	SRP_NO_DATA_DESC	= 0,
 	SRP_DATA_DESC_DIRECT	= 1,
-	SRP_DATA_DESC_INDIRECT	= 2
+	SRP_DATA_DESC_INDIRECT	= 2,
+	SRP_DATA_DESC_IMM	= 3,
 };
 
 enum {
@@ -109,6 +117,16 @@ struct srp_indirect_buf {
 	__be32			len;
 	struct srp_direct_buf	desc_list[0];
 } __attribute__((packed));
+
+/*
+ * Note: This is an extension of SRP r16a.
+ * @len:    Immediate data length.
+ * @offset: Offset from start of information unit to immediate data.
+ */
+struct srp_imm_buf {
+	__be32	len;
+	__be32	offset;
+};
 
 enum {
 	SRP_MULTICHAN_SINGLE = 0,

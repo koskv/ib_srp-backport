@@ -71,6 +71,9 @@ enum {
 
 	LOCAL_INV_WR_ID_MASK	= 1,
 	FAST_REG_WR_ID_MASK	= 2,
+
+	SRP_MAX_IMM_SGE		= 2,
+	SRP_IMM_DATA_OUT_OFFSET	= 80,
 };
 
 enum srp_target_state {
@@ -149,6 +152,10 @@ struct srp_request {
 	uint32_t		tag;
 };
 
+/*
+ * @max_it_iu_len: Maximum initiator-to-target information unit length as
+ *    granted by the SRP target.
+ */
 struct srp_rdma_ch {
 	/* These are RW in the hot path, and commonly used together */
 	struct list_head	free_tx;
@@ -191,12 +198,17 @@ struct srp_rdma_ch {
 	struct srp_iu	       **rx_ring;
 	struct srp_request	*req_ring;
 	int			 max_ti_iu_len;
+	unsigned int		 max_it_iu_len;
+	u16			 buf_fmt;
 	int			 comp_vector;
 
 	struct completion	tsk_mgmt_done;
 	u8			tsk_mgmt_status;
 };
 
+/*
+ * @max_iu_len: Requested maximum information unit length.
+ */
 struct srp_target_port {
 	/* read and written in the hot path */
 	spinlock_t		lock;
@@ -264,6 +276,8 @@ struct srp_iu {
 	void		       *buf;
 	size_t			size;
 	enum dma_data_direction	direction;
+	u32			num_sge;
+	struct ib_sge		sge[1 + SRP_MAX_IMM_SGE];
 };
 
 /**

@@ -175,6 +175,9 @@ MODULE_PARM_DESC(dev_loss_tmo,
 		 " if fast_io_fail_tmo has not been set. \"off\" means that"
 		 " this functionality is disabled.");
 
+static bool enable_imm_data;
+module_param(enable_imm_data, bool, 0644);
+
 static unsigned ch_count = 1;
 module_param(ch_count, uint, 0444);
 
@@ -616,7 +619,7 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 	init_attr->cap.max_send_wr     = m * target->queue_size;
 	init_attr->cap.max_recv_wr     = target->queue_size;
 	init_attr->cap.max_recv_sge    = 1;
-	init_attr->cap.max_send_sge    = 1;
+	init_attr->cap.max_send_sge    = 1 + SRP_MAX_IMM_SGE;
 	init_attr->sq_sig_type         = IB_SIGNAL_REQ_WR;
 	init_attr->qp_type             = IB_QPT_RC;
 	init_attr->send_cq             = send_cq;
@@ -875,7 +878,8 @@ static int srp_send_req(struct srp_rdma_ch *ch, bool multich)
 	req->ib_req.tag = 0;
 	req->ib_req.req_it_iu_len = cpu_to_be32(target->max_iu_len);
 	req->ib_req.req_buf_fmt	= cpu_to_be16(SRP_BUF_FORMAT_DIRECT |
-					      SRP_BUF_FORMAT_INDIRECT);
+					      SRP_BUF_FORMAT_INDIRECT |
+					      SRP_BUF_FORMAT_IMM);
 	req->ib_req.req_flags = (multich ? SRP_MULTICHAN_MULTI :
 				 SRP_MULTICHAN_SINGLE);
 
@@ -1717,15 +1721,18 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_rdma_ch *ch,
 			struct srp_request *req)
 {
 	struct srp_target_port *target = ch->target;
-	struct scatterlist *scat;
+	struct scatterlist *scat, *sg;
 	struct srp_cmd *cmd = req->cmd->buf;
-	int len, nents, count;
+	int i, len, nents, count;
 	struct srp_device *dev;
 	struct ib_device *ibdev;
 	struct srp_map_state state;
 	struct srp_indirect_buf *indirect_hdr;
+	u64 data_len;
 	u32 table_len;
 	u8 fmt;
+
+	req->cmd->num_sge = 1;
 
 	if (!scsi_sglist(scmnd) || scmnd->sc_data_direction == DMA_NONE)
 		return sizeof (struct srp_cmd);
@@ -1740,6 +1747,7 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_rdma_ch *ch,
 
 	nents = scsi_sg_count(scmnd);
 	scat  = scsi_sglist(scmnd);
+	data_len = scsi_bufflen(scmnd);
 
 	dev = target->srp_host->srp_dev;
 	ibdev = dev->dev;
@@ -1747,6 +1755,29 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_rdma_ch *ch,
 	count = ib_dma_map_sg(ibdev, scat, nents, scmnd->sc_data_direction);
 	if (unlikely(count == 0))
 		return -EIO;
+
+	fmt = SRP_DATA_DESC_IMM;
+	len = SRP_IMM_DATA_OUT_OFFSET;
+
+	if (enable_imm_data &&
+	    ch->buf_fmt & SRP_BUF_FORMAT_IMM &&
+	    count <= SRP_MAX_IMM_SGE &&
+	    len + data_len <= ch->max_it_iu_len &&
+	    scmnd->sc_data_direction == DMA_TO_DEVICE) {
+		struct srp_imm_buf *buf = (void *)cmd->add_data;
+		struct ib_sge *sge = &req->cmd->sge[1];
+
+		req->nmdesc = 0;
+		buf->len = cpu_to_be32(data_len);
+		buf->offset = SRP_IMM_DATA_OUT_OFFSET;
+		req->cmd->num_sge = count + 1;
+		for_each_sg(scat, sg, count, i) {
+			sge[i].addr   = ib_sg_dma_address(ibdev, sg);
+			sge[i].length = ib_sg_dma_len(ibdev, sg);
+			sge[i].lkey   = target->lkey;
+		}
+		goto map_complete;
+	}
 
 	fmt = SRP_DATA_DESC_DIRECT;
 	len = sizeof (struct srp_cmd) +	sizeof (struct srp_direct_buf);
@@ -1894,17 +1925,19 @@ static struct srp_iu *__srp_get_tx_iu(struct srp_rdma_ch *ch,
 static int srp_post_send(struct srp_rdma_ch *ch, struct srp_iu *iu, int len)
 {
 	struct srp_target_port *target = ch->target;
-	struct ib_sge list;
 	struct ib_send_wr wr, *bad_wr;
 
-	list.addr   = iu->dma;
-	list.length = len;
-	list.lkey   = target->lkey;
+	if (WARN_ON(iu->num_sge > SRP_MAX_IMM_SGE + 1))
+		return -EINVAL;
+
+	iu->sge[0].addr   = iu->dma;
+	iu->sge[0].length = len;
+	iu->sge[0].lkey   = target->lkey;
 
 	wr.next       = NULL;
 	wr.wr_id      = (uintptr_t) iu;
-	wr.sg_list    = &list;
-	wr.num_sge    = 1;
+	wr.sg_list    = &iu->sge[0];
+	wr.num_sge    = iu->num_sge;
 	wr.opcode     = IB_WR_SEND;
 	wr.send_flags = IB_SEND_SIGNALED;
 
@@ -2010,6 +2043,7 @@ static int srp_response_common(struct srp_rdma_ch *ch, s32 req_delta,
 		return 1;
 	}
 
+	iu->num_sge = 1;
 	ib_dma_sync_single_for_cpu(dev, iu->dma, len, DMA_TO_DEVICE);
 	memcpy(iu->buf, rsp, len);
 	ib_dma_sync_single_for_device(dev, iu->dma, len, DMA_TO_DEVICE);
@@ -2458,6 +2492,8 @@ static void srp_cm_rep_handler(struct ib_cm_id *cm_id,
 
 	if (lrsp->opcode == SRP_LOGIN_RSP) {
 		ch->max_ti_iu_len = be32_to_cpu(lrsp->max_ti_iu_len);
+		ch->max_it_iu_len = be32_to_cpu(lrsp->max_it_iu_len);
+		ch->buf_fmt	  = be16_to_cpu(lrsp->buf_fmt);
 		ch->req_lim       = be32_to_cpu(lrsp->req_lim_delta);
 
 		/*
@@ -2884,6 +2920,8 @@ static int srp_send_tsk_mgmt(struct srp_rdma_ch *ch, u64 req_tag,
 
 		return -1;
 	}
+
+	iu->num_sge = 1;
 
 	ib_dma_sync_single_for_cpu(dev, iu->dma, sizeof *tsk_mgmt,
 				   DMA_TO_DEVICE);
@@ -4168,6 +4206,7 @@ static int __init srp_init_module(void)
 	int ret;
 
 	BUILD_BUG_ON(FIELD_SIZEOF(struct ib_wc, wr_id) < sizeof(void *));
+	BUILD_BUG_ON(sizeof(struct srp_imm_buf) != 8);
 
 	if (srp_sg_tablesize) {
 		pr_warn("srp_sg_tablesize is deprecated, please use cmd_sg_entries\n");

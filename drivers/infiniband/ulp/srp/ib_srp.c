@@ -2170,7 +2170,9 @@ static void srp_cm_rej_handler(struct ib_cm_id *cm_id,
 					     PFX "SRP_LOGIN_REJ: requested max_it_iu_len too large\n");
 			else
 				shost_printk(KERN_WARNING, shost,
-					    PFX "SRP LOGIN REJECTED, reason 0x%08x\n", reason);
+					     PFX "SRP LOGIN from %pI6 to %pI6 REJECTED, reason 0x%08x\n",
+					     target->path.sgid.raw,
+					     target->orig_dgid, reason);
 		} else
 			shost_printk(KERN_WARNING, shost,
 				     "  REJ reason: IB_CM_REJ_CONSUMER_DEFINED,"

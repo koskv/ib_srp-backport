@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.17
+Version:	2.0.18
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Jan 10 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.18
+- Build fix for RHEL 6.5 (kernel headers >= 2.6.32-431.3.1.el6)
+- Build fix for RHEL 5.x for a change introduced in v2.0.15 of this driver.
 * Mon Jan 06 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.17
 - Log initiator and target GID if a login has been rejected. An example:
   kernel: scsi host11: ib_srp: SRP LOGIN from fe80:0000:0000:0000:0002:c903:00a3:4fb1 to fe80:0000:0000:0000:0002:c903:00a3:4271 REJECTED, reason 0x00010001

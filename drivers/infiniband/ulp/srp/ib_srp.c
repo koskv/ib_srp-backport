@@ -949,7 +949,15 @@ static void srp_finish_req(struct srp_target_port *target,
 
 	if (scmnd) {
 		srp_free_req(target, req, scmnd, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 		scmnd->request->cmd_flags |= REQ_QUIET;
+#else
+		/*
+		 * See also commit "Split struct request ->flags into two
+		 * parts" (4aff5e2333c9a1609662f2091f55c3f6fffdad36).
+		 */
+		scmnd->request->flags |= REQ_QUIET;
+#endif
 		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
 	}
@@ -1875,7 +1883,11 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 
 	result = srp_chkready(target->rport);
 	if (unlikely(result)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 		scmnd->request->cmd_flags |= REQ_QUIET;
+#else
+		scmnd->request->flags |= REQ_QUIET;
+#endif
 		scmnd->result = result;
 		scmnd->scsi_done(scmnd);
 		goto unlock_rport;
@@ -2383,7 +2395,11 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 	else
 		ret = FAILED;
 	srp_free_req(target, req, scmnd, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	scmnd->request->cmd_flags |= REQ_QUIET;
+#else
+	scmnd->request->flags |= REQ_QUIET;
+#endif
 	scmnd->result = DID_ABORT << 16;
 	scmnd->scsi_done(scmnd);
 

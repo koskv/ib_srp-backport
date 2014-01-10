@@ -62,7 +62,9 @@ typedef unsigned long uintptr_t;
 
 /* <rdma/ib_verbs.h> */
 /* commit 7083e42e */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0) &&	\
+	(!defined(RHEL_MAJOR) || RHEL_MAJOR -0 < 6 ||	\
+	 RHEL_MAJOR -0 == 6 && RHEL_MINOR -0 < 5)
 /**
  * ib_inc_rkey - increments the key portion of the given rkey. Can be used
  * for calculating a new rkey for type 2 memory windows.

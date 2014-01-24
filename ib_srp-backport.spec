@@ -82,11 +82,11 @@ depmod %{kversion}
 * Mon Dec 16 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.15
 - Fail SCSI commands silently that failed because of a transport layer
   error.
-* Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.14
+* Mon Nov 25 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.14
 - FRWR mode: avoid that paths start to bounce after a cable reconnect.
 - Fixed a regression introduced in v2.0.13 that sometimes caused multipathd
   to stall for two minutes.
-* Mon Nov 26 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.13
+* Mon Nov 25 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.13
 - Fix a sporadic kernel crash triggered by path failover.
 - Renamed can_queue login parameter into queue_size.
 * Mon Nov 18 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.12
@@ -121,7 +121,7 @@ depmod %{kversion}
 - Added prefer_frwr kernel module parameter (default value false aka use FMR).
 - Fix a race condition between the code for time-based reconnecting and the
   SCSI EH.
-* Sun Sep 09 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.4
+* Sun Sep 08 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.4
 - The RPM depends now on /boot/vmlinuz-\${kv} instead of /lib/modules/\${kv}.
 * Sun Sep 08 2013 Bart Van Assche <bvanassche@fusionio.com> - 2.0.3
 - Since IB symbols are not in the KABI, make this RPM dependent on the kernel

@@ -158,7 +158,7 @@ module_param_call(dev_loss_tmo, (param_set_fn)srp_tmo_set,
 MODULE_PARM_DESC(dev_loss_tmo,
 		 "Maximum number of seconds that the SRP transport should"
 		 " insulate transport layer errors. After this time has been"
-		 " exceeded the SCSI target is removed. Should be"
+		 " exceeded the SCSI host is removed. Should be"
 		 " between 1 and " __stringify(SCSI_DEVICE_BLOCK_MAX_TIMEOUT)
 		 " if fast_io_fail_tmo has not been set. \"off\" means that"
 		 " this functionality is disabled.");

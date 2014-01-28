@@ -114,7 +114,6 @@ module_param(prefer_frwr, bool, 0444);
 MODULE_PARM_DESC(prefer_frwr,
 		 "Whether to use FRWR if both FMR and FRWR are available");
 
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
 static struct kernel_param_ops srp_tmo_ops;
 #else

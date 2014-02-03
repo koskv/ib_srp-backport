@@ -133,7 +133,7 @@ struct srp_request {
 	short			index;
 };
 
-struct srp_target_port {
+struct srp_rdma_ch {
 	/* These are RW in the hot path, and commonly used together */
 	struct list_head	free_tx;
 	struct list_head	free_reqs;
@@ -141,6 +141,7 @@ struct srp_target_port {
 	s32			req_lim;
 
 	/* These are read-only in the hot path */
+	struct srp_target_port *target;
 	struct ib_cq	       *send_cq ____cacheline_aligned_in_smp;
 	struct ib_cq	       *recv_cq;
 	struct ib_qp	       *qp;
@@ -148,13 +149,6 @@ struct srp_target_port {
 		struct ib_fmr_pool     *fmr_pool;
 		struct srp_fr_pool     *fr_pool;
 	};
-	u32			lkey;
-	u32			rkey;
-	enum srp_target_state	state;
-	unsigned int		max_iu_len;
-	unsigned int		cmd_sg_cnt;
-	unsigned int		indirect_size;
-	bool			allow_ext_sg;
 	struct ib_wc		recv_wc[16];
 	struct ib_wc		send_wc[16];
 
@@ -162,6 +156,32 @@ struct srp_target_port {
 	 * command processing. Try to keep them packed into cachelines.
 	 */
 
+	struct ib_cm_id	       *cm_id;
+	struct srp_iu	       **tx_ring;
+	struct srp_iu	       **rx_ring;
+	struct srp_request	*req_ring;
+	int			 max_ti_iu_len;
+	int			 comp_vector;
+
+	struct completion	tsk_mgmt_done;
+	u8			tsk_mgmt_status;
+};
+
+struct srp_target_port {
+	/* read and written in the hot path */
+	spinlock_t		lock;
+
+	/* read only in the hot path */
+	struct srp_rdma_ch	ch;
+	u32			lkey;
+	u32			rkey;
+	enum srp_target_state	state;
+	unsigned int		max_iu_len;
+	unsigned int		cmd_sg_cnt;
+	unsigned int		indirect_size;
+	bool			allow_ext_sg;
+
+	/* other member variables */
 	__be64			id_ext;
 	__be64			ioc_guid;
 	__be64			service_id;
@@ -187,15 +207,7 @@ struct srp_target_port {
 	u32			rq_tmo_jiffies;
 	bool			connected;
 
-	struct ib_cm_id	       *cm_id;
-
-	int			max_ti_iu_len;
-
 	int			zero_req_lim;
-
-	struct srp_iu	       **tx_ring;
-	struct srp_iu	       **rx_ring;
-	struct srp_request	*req_ring;
 
 	struct work_struct	tl_err_work;
 	struct work_struct	remove_work;
@@ -204,9 +216,6 @@ struct srp_target_port {
 	struct completion	done;
 	int			status;
 	bool			qp_in_error;
-
-	struct completion	tsk_mgmt_done;
-	u8			tsk_mgmt_status;
 };
 
 struct srp_iu {

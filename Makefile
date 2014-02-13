@@ -67,17 +67,19 @@ all: check
 	    PRE_CFLAGS="$(OFED_CFLAGS)" modules
 
 install: all
-	install -vD -m 644 drivers/scsi/scsi_transport_srp.ko  \
-	$(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/scsi_transport_srp.ko
-	install -vD -m 644 drivers/infiniband/ulp/srp/ib_srp.ko \
-	$(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/ib_srp.ko
+	for m in drivers/scsi/scsi_transport_srp.ko			   \
+	  drivers/infiniband/ulp/srp/ib_srp.ko; do		   	   \
+	  install -vD -m 644 $$m					   \
+	    $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/$$(basename $$m); \
+	done
 	if [ -z "$(INSTALL_MOD_PATH)" ]; then	\
 	  /sbin/depmod -a $(KVER);			\
 	fi
 
 uninstall:
-	rm -f $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/scsi_transport_srp.ko
-	rm -f $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/ib_srp.ko
+	for m in scsi_transport_srp.ko ib_srp.ko; do			       \
+	  rm -f $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)/$$m;\
+	done
 	if [ -z "$(INSTALL_MOD_PATH)" ]; then	\
 	  /sbin/depmod -a $(KVER);			\
 	fi

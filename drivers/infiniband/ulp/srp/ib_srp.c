@@ -1023,14 +1023,16 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 	else
 		srp_create_target_ib(target);
 
-	for (i = 0; i < target->req_ring_size; ++i) {
-		struct srp_request *req = &target->req_ring[i];
-		/*
-		 * Avoid that srp_finish_req() tries to use the QP since
-		 * QP reallocation could have failed.
-		 */
-		req->frwr.rkey_valid = false;
-		srp_finish_req(target, req, NULL, DID_RESET << 16);
+	if (target->req_ring) {
+		for (i = 0; i < target->req_ring_size; ++i) {
+			struct srp_request *req = &target->req_ring[i];
+			/*
+			 * Avoid that srp_finish_req() tries to use the QP since
+			 * QP reallocation could have failed.
+			 */
+			req->frwr.rkey_valid = false;
+			srp_finish_req(target, req, NULL, DID_RESET << 16);
+		}
 	}
 
 	/* Reallocate requests to reset the MR state in FRWR mode. */
@@ -1039,8 +1041,9 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 		ret = srp_alloc_req_data(target);
 
 	INIT_LIST_HEAD(&target->free_tx);
-	for (i = 0; i < target->queue_size; ++i)
-		list_add(&target->tx_ring[i]->list, &target->free_tx);
+	if (target->tx_ring)
+		for (i = 0; i < target->queue_size; ++i)
+			list_add(&target->tx_ring[i]->list, &target->free_tx);
 
 	if (ret == 0)
 		ret = srp_connect_target(target);

@@ -898,6 +898,7 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
  * srp_claim_req - Take ownership of the scmnd associated with a request.
  * @target: SRP target port.
  * @req: SRP request.
+ * @sdev: If not NULL, only take ownership for this SCSI device.
  * @scmnd: If NULL, take ownership of @req->scmnd. If not NULL, only take
  *         ownership of @req->scmnd if it equals @scmnd.
  *
@@ -906,15 +907,16 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
  */
 static struct scsi_cmnd *srp_claim_req(struct srp_target_port *target,
 				       struct srp_request *req,
+				       struct scsi_device *sdev,
 				       struct scsi_cmnd *scmnd)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&target->lock, flags);
-	if (!scmnd) {
+	if (req->scmnd &&
+	    (!sdev || req->scmnd->device == sdev) &&
+	    (!scmnd || req->scmnd == scmnd)) {
 		scmnd = req->scmnd;
-		req->scmnd = NULL;
-	} else if (req->scmnd == scmnd) {
 		req->scmnd = NULL;
 	} else {
 		scmnd = NULL;
@@ -947,9 +949,10 @@ static void srp_free_req(struct srp_target_port *target,
 }
 
 static void srp_finish_req(struct srp_target_port *target,
-			   struct srp_request *req, int result)
+			   struct srp_request *req, struct scsi_device *sdev,
+			   int result)
 {
-	struct scsi_cmnd *scmnd = srp_claim_req(target, req, NULL);
+	struct scsi_cmnd *scmnd = srp_claim_req(target, req, sdev, NULL);
 
 	if (scmnd) {
 		srp_free_req(target, req, scmnd, 0);
@@ -974,7 +977,7 @@ static void srp_terminate_io(struct srp_rport *rport)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		struct srp_request *req = &target->req_ring[i];
-		srp_finish_req(target, req, DID_TRANSPORT_FAILFAST << 16);
+		srp_finish_req(target, req, NULL, DID_TRANSPORT_FAILFAST << 16);
 	}
 }
 
@@ -1016,7 +1019,7 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 		 * QP reallocation could have failed.
 		 */
 		req->frwr.rkey_valid = false;
-		srp_finish_req(target, req, DID_RESET << 16);
+		srp_finish_req(target, req, NULL, DID_RESET << 16);
 	}
 
 	/* Reallocate requests to reset the MR state in FRWR mode. */
@@ -1572,7 +1575,7 @@ static void srp_process_rsp(struct srp_target_port *target, struct srp_rsp *rsp)
 		complete(&target->tsk_mgmt_done);
 	} else {
 		req = &target->req_ring[rsp->tag];
-		scmnd = srp_claim_req(target, req, NULL);
+		scmnd = srp_claim_req(target, req, NULL, NULL);
 		if (!scmnd) {
 			shost_printk(KERN_ERR, target->scsi_host,
 				     "Null scmnd for RSP w/tag %016llx\n",
@@ -1874,7 +1877,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	struct srp_cmd *cmd;
 	struct ib_device *dev;
 	unsigned long flags;
-	int len, result;
+	int len, result, ret = 0;
 	const bool in_scsi_eh = !in_interrupt() && current == shost->ehandler;
 
 	/*
@@ -1922,8 +1925,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	cmd->tag    = req->index;
 	memcpy(cmd->cdb, scmnd->cmnd, scmnd->cmd_len);
 
-	req->scmnd    = scmnd;
-	req->cmd      = iu;
+	req->cmd = iu;
 
 	len = srp_map_data(scmnd, target, req);
 	if (len < 0) {
@@ -1941,7 +1943,14 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	ib_dma_sync_single_for_device(dev, iu->dma, target->max_iu_len,
 				      DMA_TO_DEVICE);
 
-	if (srp_post_send(target, iu, len)) {
+	spin_lock_irqsave(&target->lock, flags);
+	if (srp_post_send(target, iu, len) == 0)
+		req->scmnd = scmnd;
+	else
+		ret = SCSI_MLQUEUE_HOST_BUSY;
+	spin_unlock_irqrestore(&target->lock, flags);
+
+	if (ret) {
 		shost_printk(KERN_ERR, target->scsi_host, PFX "Send failed\n");
 		goto err_unmap;
 	}
@@ -1950,7 +1959,7 @@ unlock_rport:
 	if (in_scsi_eh)
 		mutex_unlock(&rport->mutex);
 
-	return 0;
+	return ret;
 
 err_unmap:
 	srp_unmap_data(scmnd, target, req);
@@ -1964,10 +1973,8 @@ err_iu:
 err_unlock:
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	if (in_scsi_eh)
-		mutex_unlock(&rport->mutex);
-
-	return SCSI_MLQUEUE_HOST_BUSY;
+	ret = SCSI_MLQUEUE_HOST_BUSY;
+	goto unlock_rport;
 }
 
 /*
@@ -2390,7 +2397,7 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 
 	shost_printk(KERN_ERR, target->scsi_host, "SRP abort called\n");
 
-	if (!req || !srp_claim_req(target, req, scmnd))
+	if (!req || !srp_claim_req(target, req, NULL, scmnd))
 		return SUCCESS;
 	if (srp_send_tsk_mgmt(target, req->index, scmnd->device->lun,
 			      SRP_TSK_ABORT_TASK) == 0)
@@ -2426,8 +2433,7 @@ static int srp_reset_device(struct scsi_cmnd *scmnd)
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		struct srp_request *req = &target->req_ring[i];
-		if (req->scmnd && req->scmnd->device == scmnd->device)
-			srp_finish_req(target, req, DID_RESET << 16);
+		srp_finish_req(target, req, scmnd->device, DID_RESET << 16);
 	}
 
 	return SUCCESS;

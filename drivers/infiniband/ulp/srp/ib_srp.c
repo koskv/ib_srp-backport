@@ -3164,7 +3164,7 @@ static ssize_t srp_create_target(struct device *dev,
 	target->cmd_sg_cnt	= cmd_sg_entries;
 	target->sg_tablesize	= indirect_sg_entries ? : cmd_sg_entries;
 	target->allow_ext_sg	= allow_ext_sg;
-	target->tl_retry_count	= 3;
+	target->tl_retry_count	= 2;
 	target->queue_size	= SRP_DEFAULT_QUEUE_SIZE;
 	target->use_fast_reg	= srp_dev->use_fast_reg;
 

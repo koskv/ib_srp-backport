@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.18
+Version:	2.0.19
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,14 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Feb 21 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.19
+- Reduced the default value of the tl_retry_count parameter from 3 into 2.
+  This change reduces the time needed to detect a cable pull from about
+  17s to about 13s.
+- SGID and DGID are now included in LOGIN REJECTED messages. SGID is now
+  included in new target messages. This makes it possible to determine
+  which IB ports these messages apply to.
+- Fixed the description of the dev_loss_tmo kernel module parameter.
 * Fri Jan 10 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.18
 - Build fix for RHEL 6.5 (kernel headers >= 2.6.32-431.3.1.el6)
 - Build fix for RHEL 5.x for a change introduced in v2.0.15 of this driver.

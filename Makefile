@@ -62,6 +62,7 @@ all: check
 		echo "$$line" >>"$$m";					   \
 	    fi								   \
 	done
+	CONFIG_SCSI_SRP_ATTRS=m CONFIG_SCSI_SRP=m CONFIG_INFINIBAND_SRP=m  \
 	$(MAKE) -C $(KDIR) M=$(shell pwd)/drivers/infiniband/ulp/srp	   \
 	    PRE_CFLAGS="$(OFED_CFLAGS)" modules
 

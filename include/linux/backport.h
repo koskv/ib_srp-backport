@@ -99,9 +99,15 @@ static inline u32 ib_inc_rkey(u32 rkey)
 static inline void scsi_target_unblock_compat(struct device *dev,
 					      enum scsi_device_state new_state)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0) &&	\
+	!defined(CONFIG_SUSE_KERNEL) ||			\
+	LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 76)
 	scsi_target_unblock(dev);
 #else
+	/*
+	 * In upstream kernel 3.5.0 and in SLES 11 SP3 and later
+	 * scsi_target_unblock() takes two arguments.
+	 */
 	scsi_target_unblock(dev, new_state);
 #endif
 }

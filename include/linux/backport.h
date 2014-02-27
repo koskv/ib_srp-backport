@@ -10,6 +10,19 @@
 #endif
 #include <scsi/scsi_device.h> /* SDEV_TRANSPORT_OFFLINE */
 
+/* <linux/blkdev.h> */
+#if !defined(CONFIG_SUSE_KERNEL) &&				\
+	LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) ||	\
+	defined(CONFIG_SUSE_KERNEL) &&				\
+	LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+/*
+ * See also commit 24faf6f6 (upstream kernel 3.7.0). Note: request_fn_active
+ * is not present in the openSUSE 12.3 kernel desipite having version number
+ * 3.7.10.
+ */
+#define HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
+#endif
+
 /* <linux/kernel.h> */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39) &&  \
 	(!defined(RHEL_MAJOR) || RHEL_MAJOR -0 < 6 || \

@@ -638,6 +638,7 @@ void srp_start_tl_fail_timers(struct srp_rport *rport)
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
 
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
 /**
  * scsi_request_fn_active() - number of kernel threads inside scsi_request_fn()
  * @shost: SCSI host for which to count the number of scsi_request_fn() callers.
@@ -652,16 +653,13 @@ static int scsi_request_fn_active(struct Scsi_Host *shost)
 		q = sdev->request_queue;
 
 		spin_lock_irq(q->queue_lock);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0) && \
-	!defined(CONFIG_SUSE_KERNEL)
-		/* See also commit 24faf6f6 */
 		request_fn_active += q->request_fn_active;
-#endif
 		spin_unlock_irq(q->queue_lock);
 	}
 
 	return request_fn_active;
 }
+#endif
 
 /**
  * srp_reconnect_rport() - reconnect to an SRP target port
@@ -698,8 +696,12 @@ int srp_reconnect_rport(struct srp_rport *rport)
 	if (res)
 		goto out;
 	scsi_target_block(&shost->shost_gendev);
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
 	while (scsi_request_fn_active(shost))
 		msleep(20);
+#else
+	msleep(200);
+#endif
 	res = rport->state != SRP_RPORT_LOST ? i->f->reconnect(rport) : -ENODEV;
 	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
 		 dev_name(&shost->shost_gendev), rport->state, res);

@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.19
+Version:	2.0.20
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,13 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Mar 6 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.20
+- Fixed a hard to trigger race condition that could be hit when the
+  fast_io_fail_tmo timer expires and that could result in a kernel crash.
+- Fixed a hard to trigger race condition that could be hit on RHEL 6
+  initiator systems when the reconnect_delay timer expires and that could
+  result in a kernel crash.
+- Build fix for SLES 11 SP3.
 * Fri Feb 21 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.19
 - Reduced the default value of the tl_retry_count parameter from 3 into 2.
   This change reduces the time needed to detect a cable pull from about

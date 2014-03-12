@@ -973,7 +973,18 @@ static void srp_finish_req(struct srp_target_port *target,
 static void srp_terminate_io(struct srp_rport *rport)
 {
 	struct srp_target_port *target = rport->lld_data;
+	struct Scsi_Host *shost = target->scsi_host;
+	struct scsi_device *sdev;
 	int i;
+
+	/*
+	 * Invoking srp_terminate_io() while srp_queuecommand() is running
+	 * is not safe. Hence the warning statement below.
+	 */
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
+	shost_for_each_device(sdev, shost)
+		WARN_ON_ONCE(sdev->request_queue->request_fn_active);
+#endif
 
 	for (i = 0; i < target->req_ring_size; ++i) {
 		struct srp_request *req = &target->req_ring[i];
@@ -1877,7 +1888,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	struct srp_cmd *cmd;
 	struct ib_device *dev;
 	unsigned long flags;
-	int len, result, ret = 0;
+	int len, result;
 	const bool in_scsi_eh = !in_interrupt() && current == shost->ehandler;
 
 	/*
@@ -1925,7 +1936,8 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	cmd->tag    = req->index;
 	memcpy(cmd->cdb, scmnd->cmnd, scmnd->cmd_len);
 
-	req->cmd = iu;
+	req->scmnd    = scmnd;
+	req->cmd      = iu;
 
 	len = srp_map_data(scmnd, target, req);
 	if (len < 0) {
@@ -1943,14 +1955,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	ib_dma_sync_single_for_device(dev, iu->dma, target->max_iu_len,
 				      DMA_TO_DEVICE);
 
-	spin_lock_irqsave(&target->lock, flags);
-	if (srp_post_send(target, iu, len) == 0)
-		req->scmnd = scmnd;
-	else
-		ret = SCSI_MLQUEUE_HOST_BUSY;
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	if (ret) {
+	if (srp_post_send(target, iu, len)) {
 		shost_printk(KERN_ERR, target->scsi_host, PFX "Send failed\n");
 		goto err_unmap;
 	}
@@ -1959,7 +1964,7 @@ unlock_rport:
 	if (in_scsi_eh)
 		mutex_unlock(&rport->mutex);
 
-	return ret;
+	return 0;
 
 err_unmap:
 	srp_unmap_data(scmnd, target, req);
@@ -1973,8 +1978,10 @@ err_iu:
 err_unlock:
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	ret = SCSI_MLQUEUE_HOST_BUSY;
-	goto unlock_rport;
+	if (in_scsi_eh)
+		mutex_unlock(&rport->mutex);
+
+	return SCSI_MLQUEUE_HOST_BUSY;
 }
 
 /*

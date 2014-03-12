@@ -113,7 +113,7 @@ check:
 	    echo "Error: the OFED kernel RPM has not yet been installed.";  \
 	    false;                                                          \
 	  else                                                              \
-	    echo "  Building against non-OFED InfiniBand kernel headers.";  \
+	    echo "  Building against in-tree InfiniBand kernel headers.";   \
 	  fi;                                                               \
 	fi
 

@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.20
+Version:	2.0.21
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Mar 17 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.21
+- Fixed a small performance regression that got introduced in v2.0.20.
 * Thu Mar 6 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.20
 - Fixed a hard to trigger race condition that could be hit when the
   fast_io_fail_tmo timer expires and that could result in a kernel crash.

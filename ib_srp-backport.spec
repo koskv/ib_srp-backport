@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.21
+Version:	2.0.22
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -23,7 +23,7 @@ Requires:	/sbin/depmod /usr/bin/find %{kernel_rpm}
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-build-%(%{__id_u} -n)
 
 %description
-Backport of the Linux IB/SRP 3.11 kernel module to earlier kernel versions.
+Backport of the Linux IB/SRP 3.14 kernel module to earlier kernel versions.
 
 %prep
 rm -rf $RPM_BUILD_ROOT
@@ -69,6 +69,14 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Tue Mar 25 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.22
+- Reworked FRWR support (FRWR = fast registration work request; an alternative
+  for FMR to register memory with an HCA). Added support for non-contiguous
+  memory regions. One FRWR pool per connection instead of one per initiator
+  HCA to maximize scalability. Removed the "fast_reg" sysfs attribute and the
+  "use_fast_reg" login parameter since the choice between FRWR and FMR is now
+  global instead of per SRP connection. Added the "register_always" kernel
+  module parameter to make it easier to test the FRWR implementation.
 * Mon Mar 17 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.21
 - Fixed a small performance regression that got introduced in v2.0.20.
 * Thu Mar 6 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.20

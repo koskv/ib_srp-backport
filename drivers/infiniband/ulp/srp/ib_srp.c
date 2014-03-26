@@ -685,13 +685,29 @@ static int srp_lookup_path(struct srp_target_port *target)
 	return target->status;
 }
 
+static u8 srp_get_subnet_timeout(struct srp_host *host)
+{
+	struct ib_port_attr attr;
+	int ret;
+	u8 subnet_timeout = 18;
+
+	ret = ib_query_port(host->srp_dev->dev, host->port, &attr);
+	if (ret == 0)
+		subnet_timeout = attr.subnet_timeout;
+
+	return subnet_timeout;
+}
+
 static int srp_send_req(struct srp_target_port *target)
 {
 	struct {
 		struct ib_cm_req_param param;
 		struct srp_login_req   priv;
 	} *req = NULL;
+	u8 subnet_timeout;
 	int status;
+
+	subnet_timeout = srp_get_subnet_timeout(target->srp_host);
 
 	req = kzalloc(sizeof *req, GFP_KERNEL);
 	if (!req)
@@ -714,8 +730,8 @@ static int srp_send_req(struct srp_target_port *target)
 	 * module parameters if anyone cared about setting them.
 	 */
 	req->param.responder_resources	      = 4;
-	req->param.remote_cm_response_timeout = 20;
-	req->param.local_cm_response_timeout  = 20;
+	req->param.remote_cm_response_timeout = subnet_timeout + 2;
+	req->param.local_cm_response_timeout  = subnet_timeout + 2;
 	req->param.retry_count                = target->tl_retry_count;
 	req->param.rnr_retry_count 	      = 7;
 	req->param.max_cm_retries 	      = 15;

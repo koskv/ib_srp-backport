@@ -1020,7 +1020,6 @@ static void srp_rport_delete(struct srp_rport *rport)
 static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 {
 	struct srp_target_port *target = ch->target;
-	int retries = 3;
 	int ret;
 
 	WARN_ON_ONCE(!multich && target->connected);
@@ -1061,19 +1060,10 @@ static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 			break;
 
 		case SRP_STALE_CONN:
-			/* Our current CM id was stale, and is now in timewait.
-			 * Try to reconnect with a new one.
-			 */
-			if (!retries-- || srp_new_cm_id(ch)) {
-				shost_printk(KERN_ERR, target->scsi_host, PFX
-					     "giving up on stale connection\n");
-				target->status = -ECONNRESET;
-				return target->status;
-			}
-
 			shost_printk(KERN_ERR, target->scsi_host, PFX
-				     "retrying stale connection\n");
-			break;
+				     "giving up on stale connection\n");
+			target->status = -ECONNRESET;
+			return target->status;
 
 		default:
 			return target->status;

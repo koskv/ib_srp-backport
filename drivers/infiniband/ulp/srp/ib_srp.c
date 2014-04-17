@@ -315,7 +315,7 @@ static int srp_init_qp(struct srp_target_port *target,
 
 	ret = ib_find_cached_pkey(target->srp_host->srp_dev->dev,
 				  target->srp_host->port,
-				  be16_to_cpu(target->path.pkey),
+				  be16_to_cpu(target->pkey),
 				  &attr->pkey_index);
 	if (ret)
 		goto out;
@@ -2664,7 +2664,7 @@ static ssize_t show_pkey(struct device *dev, struct device_attribute *attr,
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
-	return sprintf(buf, "0x%04x\n", be16_to_cpu(target->path.pkey));
+	return sprintf(buf, "0x%04x\n", be16_to_cpu(target->pkey));
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -3098,10 +3098,11 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 
 			for (i = 0; i < 16; ++i) {
 				strlcpy(dgid, p + i * 2, 3);
-				target->path.dgid.raw[i] = simple_strtoul(dgid, NULL, 16);
+				((char *)target->orig_dgid)[i] =
+					simple_strtoul(dgid, NULL, 16);
 			}
 			kfree(p);
-			memcpy(target->orig_dgid, target->path.dgid.raw, 16);
+			memcpy(target->path.dgid.raw, target->orig_dgid, 16);
 			break;
 
 		case SRP_OPT_PKEY:
@@ -3109,7 +3110,8 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 				pr_warn("bad P_Key parameter '%s'\n", p);
 				goto out;
 			}
-			target->path.pkey = cpu_to_be16(token);
+			target->pkey = cpu_to_be16(token);
+			target->path.pkey = target->pkey;
 			break;
 
 		case SRP_OPT_SERVICE_ID:

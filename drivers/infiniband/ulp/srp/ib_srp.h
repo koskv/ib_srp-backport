@@ -182,6 +182,7 @@ struct srp_target_port {
 	__be16			orig_dgid[8];
 	struct ib_sa_query     *path_query;
 	int			path_query_id;
+	__be16			pkey;
 
 	u32			rq_tmo_jiffies;
 	bool			connected;

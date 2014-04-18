@@ -1131,8 +1131,10 @@ static void srp_finish_req(struct srp_target_port *target,
 static void srp_terminate_io(struct srp_rport *rport)
 {
 	struct srp_target_port *target = rport->lld_data;
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
 	struct Scsi_Host *shost = target->scsi_host;
 	struct scsi_device *sdev;
+#endif
 	int i;
 
 	/*

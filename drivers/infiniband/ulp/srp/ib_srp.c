@@ -352,6 +352,10 @@ static int srp_new_cm_id(struct srp_rdma_ch *ch)
 	if (ch->cm_id)
 		ib_destroy_cm_id(ch->cm_id);
 	ch->cm_id = new_cm_id;
+	ch->path.sgid = target->sgid;
+	memcpy(ch->path.dgid.raw, target->orig_dgid, 16);
+	ch->path.pkey = target->pkey;
+	ch->path.service_id = target->service_id;
 
 	return 0;
 }
@@ -652,52 +656,54 @@ static void srp_free_ch_ib(struct srp_rdma_ch *ch)
 
 static void srp_path_rec_completion(int status,
 				    struct ib_sa_path_rec *pathrec,
-				    void *target_ptr)
+				    void *ch_ptr)
 {
-	struct srp_target_port *target = target_ptr;
+	struct srp_rdma_ch *ch = ch_ptr;
+	struct srp_target_port *target = ch->target;
 
-	target->status = status;
+	ch->status = status;
 	if (status)
 		shost_printk(KERN_ERR, target->scsi_host,
 			     PFX "Got failed path rec status %d\n", status);
 	else
-		target->path = *pathrec;
-	complete(&target->done);
+		ch->path = *pathrec;
+	complete(&ch->done);
 }
 
-static int srp_lookup_path(struct srp_target_port *target)
+static int srp_lookup_path(struct srp_rdma_ch *ch)
 {
+	struct srp_target_port *target = ch->target;
 	int ret;
 
-	target->path.numb_path = 1;
+	ch->path.numb_path = 1;
 
-	init_completion(&target->done);
+	init_completion(&ch->done);
 
-	target->path_query_id = ib_sa_path_rec_get(&srp_sa_client,
-						   target->srp_host->srp_dev->dev,
-						   target->srp_host->port,
-						   &target->path,
-						   IB_SA_PATH_REC_SERVICE_ID	|
-						   IB_SA_PATH_REC_DGID		|
-						   IB_SA_PATH_REC_SGID		|
-						   IB_SA_PATH_REC_NUMB_PATH	|
-						   IB_SA_PATH_REC_PKEY,
-						   SRP_PATH_REC_TIMEOUT_MS,
-						   GFP_KERNEL,
-						   srp_path_rec_completion,
-						   target, &target->path_query);
-	if (target->path_query_id < 0)
-		return target->path_query_id;
+	ch->path_query_id = ib_sa_path_rec_get(&srp_sa_client,
+					       target->srp_host->srp_dev->dev,
+					       target->srp_host->port,
+					       &ch->path,
+					       IB_SA_PATH_REC_SERVICE_ID |
+					       IB_SA_PATH_REC_DGID	 |
+					       IB_SA_PATH_REC_SGID	 |
+					       IB_SA_PATH_REC_NUMB_PATH	 |
+					       IB_SA_PATH_REC_PKEY,
+					       SRP_PATH_REC_TIMEOUT_MS,
+					       GFP_KERNEL,
+					       srp_path_rec_completion,
+					       ch, &ch->path_query);
+	if (ch->path_query_id < 0)
+		return ch->path_query_id;
 
-	ret = wait_for_completion_interruptible(&target->done);
+	ret = wait_for_completion_interruptible(&ch->done);
 	if (ret < 0)
 		return ret;
 
-	if (target->status < 0)
+	if (ch->status < 0)
 		shost_printk(KERN_WARNING, target->scsi_host,
 			     PFX "Path record query failed\n");
 
-	return target->status;
+	return ch->status;
 }
 
 static u8 srp_get_subnet_timeout(struct srp_host *host)
@@ -729,7 +735,7 @@ static int srp_send_req(struct srp_rdma_ch *ch, bool multich)
 	if (!req)
 		return -ENOMEM;
 
-	req->param.primary_path 	      = &target->path;
+	req->param.primary_path 	      = &ch->path;
 	req->param.alternate_path 	      = NULL;
 	req->param.service_id 		      = target->service_id;
 	req->param.qp_num 		      = ch->qp->qp_num;
@@ -770,7 +776,7 @@ static int srp_send_req(struct srp_rdma_ch *ch, bool multich)
 	 */
 	if (target->io_class == SRP_REV10_IB_IO_CLASS) {
 		memcpy(req->priv.initiator_port_id,
-		       &target->path.sgid.global.interface_id, 8);
+		       &target->sgid.global.interface_id, 8);
 		memcpy(req->priv.initiator_port_id + 8,
 		       &target->initiator_ext, 8);
 		memcpy(req->priv.target_port_id,     &target->ioc_guid, 8);
@@ -779,7 +785,7 @@ static int srp_send_req(struct srp_rdma_ch *ch, bool multich)
 		memcpy(req->priv.initiator_port_id,
 		       &target->initiator_ext, 8);
 		memcpy(req->priv.initiator_port_id + 8,
-		       &target->path.sgid.global.interface_id, 8);
+		       &target->sgid.global.interface_id, 8);
 		memcpy(req->priv.target_port_id,     &target->id_ext, 8);
 		memcpy(req->priv.target_port_id + 8, &target->ioc_guid, 8);
 	}
@@ -1026,16 +1032,16 @@ static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 
 	target->qp_in_error = false;
 
-	ret = srp_lookup_path(target);
+	ret = srp_lookup_path(ch);
 	if (ret)
 		return ret;
 
 	while (1) {
-		init_completion(&target->done);
+		init_completion(&ch->done);
 		ret = srp_send_req(ch, multich);
 		if (ret)
 			return ret;
-		ret = wait_for_completion_interruptible(&target->done);
+		ret = wait_for_completion_interruptible(&ch->done);
 		if (ret < 0)
 			return ret;
 
@@ -1045,13 +1051,13 @@ static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 		 * back, or SRP_DLID_REDIRECT if we get a lid/qp
 		 * redirect REJ back.
 		 */
-		switch (target->status) {
+		switch (ch->status) {
 		case 0:
 			srp_change_conn_state(target, true);
 			return 0;
 
 		case SRP_PORT_REDIRECT:
-			ret = srp_lookup_path(target);
+			ret = srp_lookup_path(ch);
 			if (ret)
 				return ret;
 			break;
@@ -1062,11 +1068,11 @@ static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 		case SRP_STALE_CONN:
 			shost_printk(KERN_ERR, target->scsi_host, PFX
 				     "giving up on stale connection\n");
-			target->status = -ECONNRESET;
-			return target->status;
+			ch->status = -ECONNRESET;
+			return ch->status;
 
 		default:
-			return target->status;
+			return ch->status;
 		}
 	}
 }
@@ -2359,7 +2365,7 @@ error_free:
 	kfree(qp_attr);
 
 error:
-	target->status = ret;
+	ch->status = ret;
 }
 
 static void srp_cm_rej_handler(struct ib_cm_id *cm_id,
@@ -2374,12 +2380,12 @@ static void srp_cm_rej_handler(struct ib_cm_id *cm_id,
 	switch (event->param.rej_rcvd.reason) {
 	case IB_CM_REJ_PORT_CM_REDIRECT:
 		cpi = event->param.rej_rcvd.ari;
-		target->path.dlid = cpi->redirect_lid;
-		target->path.pkey = cpi->redirect_pkey;
+		ch->path.dlid = cpi->redirect_lid;
+		ch->path.pkey = cpi->redirect_pkey;
 		cm_id->remote_cm_qpn = be32_to_cpu(cpi->redirect_qp) & 0x00ffffff;
-		memcpy(target->path.dgid.raw, cpi->redirect_gid, 16);
+		memcpy(ch->path.dgid.raw, cpi->redirect_gid, 16);
 
-		target->status = target->path.dlid ?
+		ch->status = ch->path.dlid ?
 			SRP_DLID_REDIRECT : SRP_PORT_REDIRECT;
 		break;
 
@@ -2390,26 +2396,26 @@ static void srp_cm_rej_handler(struct ib_cm_id *cm_id,
 			 * reject reason code 25 when they mean 24
 			 * (port redirect).
 			 */
-			memcpy(target->path.dgid.raw,
+			memcpy(ch->path.dgid.raw,
 			       event->param.rej_rcvd.ari, 16);
 
 			shost_printk(KERN_DEBUG, shost,
 				     PFX "Topspin/Cisco redirect to target port GID %016llx%016llx\n",
-				     (unsigned long long) be64_to_cpu(target->path.dgid.global.subnet_prefix),
-				     (unsigned long long) be64_to_cpu(target->path.dgid.global.interface_id));
+				     be64_to_cpu(ch->path.dgid.global.subnet_prefix),
+				     be64_to_cpu(ch->path.dgid.global.interface_id));
 
-			target->status = SRP_PORT_REDIRECT;
+			ch->status = SRP_PORT_REDIRECT;
 		} else {
 			shost_printk(KERN_WARNING, shost,
 				     "  REJ reason: IB_CM_REJ_PORT_REDIRECT\n");
-			target->status = -ECONNRESET;
+			ch->status = -ECONNRESET;
 		}
 		break;
 
 	case IB_CM_REJ_DUPLICATE_LOCAL_COMM_ID:
 		shost_printk(KERN_WARNING, shost,
 			    "  REJ reason: IB_CM_REJ_DUPLICATE_LOCAL_COMM_ID\n");
-		target->status = -ECONNRESET;
+		ch->status = -ECONNRESET;
 		break;
 
 	case IB_CM_REJ_CONSUMER_DEFINED:
@@ -2424,24 +2430,24 @@ static void srp_cm_rej_handler(struct ib_cm_id *cm_id,
 			else
 				shost_printk(KERN_WARNING, shost, PFX
 					     "SRP LOGIN from %pI6 to %pI6 REJECTED, reason 0x%08x\n",
-					     target->path.sgid.raw,
+					     target->sgid.raw,
 					     target->orig_dgid, reason);
 		} else
 			shost_printk(KERN_WARNING, shost,
 				     "  REJ reason: IB_CM_REJ_CONSUMER_DEFINED,"
 				     " opcode 0x%02x\n", opcode);
-		target->status = -ECONNRESET;
+		ch->status = -ECONNRESET;
 		break;
 
 	case IB_CM_REJ_STALE_CONN:
 		shost_printk(KERN_WARNING, shost, "  REJ reason: stale connection\n");
-		target->status = SRP_STALE_CONN;
+		ch->status = SRP_STALE_CONN;
 		break;
 
 	default:
 		shost_printk(KERN_WARNING, shost, "  REJ reason 0x%x\n",
 			     event->param.rej_rcvd.reason);
-		target->status = -ECONNRESET;
+		ch->status = -ECONNRESET;
 	}
 }
 
@@ -2456,7 +2462,7 @@ static int srp_cm_handler(struct ib_cm_id *cm_id, struct ib_cm_event *event)
 		shost_printk(KERN_DEBUG, target->scsi_host,
 			     PFX "Sending CM REQ failed\n");
 		comp = 1;
-		target->status = -ECONNRESET;
+		ch->status = -ECONNRESET;
 		break;
 
 	case IB_CM_REP_RECEIVED:
@@ -2486,7 +2492,7 @@ static int srp_cm_handler(struct ib_cm_id *cm_id, struct ib_cm_event *event)
 			     PFX "connection closed\n");
 		comp = 1;
 
-		target->status = 0;
+		ch->status = 0;
 		break;
 
 	case IB_CM_MRA_RECEIVED:
@@ -2501,7 +2507,7 @@ static int srp_cm_handler(struct ib_cm_id *cm_id, struct ib_cm_event *event)
 	}
 
 	if (comp)
-		complete(&target->done);
+		complete(&ch->done);
 
 	return 0;
 }
@@ -2772,7 +2778,7 @@ static ssize_t show_sgid(struct device *dev, struct device_attribute *attr,
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
 
-	return sprintf(buf, "%pI6\n", target->path.sgid.raw);
+	return sprintf(buf, "%pI6\n", target->sgid.raw);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -2783,8 +2789,9 @@ static ssize_t show_dgid(struct device *dev, struct device_attribute *attr,
 #endif
 {
 	struct srp_target_port *target = host_to_target(class_to_shost(dev));
+	struct srp_rdma_ch *ch = &target->ch[0];
 
-	return sprintf(buf, "%pI6\n", target->path.dgid.raw);
+	return sprintf(buf, "%pI6\n", ch->path.dgid.raw);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -3204,7 +3211,6 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 					simple_strtoul(dgid, NULL, 16);
 			}
 			kfree(p);
-			memcpy(target->path.dgid.raw, target->orig_dgid, 16);
 			break;
 
 		case SRP_OPT_PKEY:
@@ -3213,7 +3219,6 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 				goto out;
 			}
 			target->pkey = cpu_to_be16(token);
-			target->path.pkey = target->pkey;
 			break;
 
 		case SRP_OPT_SERVICE_ID:
@@ -3223,7 +3228,6 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 				goto out;
 			}
 			target->service_id = cpu_to_be64(simple_strtoull(p, NULL, 16));
-			target->path.service_id = target->service_id;
 			kfree(p);
 			break;
 
@@ -3434,7 +3438,7 @@ static ssize_t srp_create_target(struct device *dev,
 	INIT_WORK(&target->remove_work, srp_remove_work);
 #endif
 	spin_lock_init(&target->lock);
-	ret = ib_query_gid(ibdev, host->port, 0, &target->path.sgid);
+	ret = ib_query_gid(ibdev, host->port, 0, &target->sgid);
 	if (ret)
 		goto err;
 
@@ -3519,9 +3523,9 @@ static ssize_t srp_create_target(struct device *dev,
 		     "new target: id_ext %016llx ioc_guid %016llx pkey %04x service_id %016llx sgid %pI6 dgid %pI6\n",
 		     be64_to_cpu(target->id_ext),
 		     be64_to_cpu(target->ioc_guid),
-		     be16_to_cpu(target->path.pkey),
+		     be16_to_cpu(target->pkey),
 		     be64_to_cpu(target->service_id),
-		     target->path.sgid.raw, target->path.dgid.raw);
+		     target->sgid.raw, target->orig_dgid);
 
 	ret = count;
 

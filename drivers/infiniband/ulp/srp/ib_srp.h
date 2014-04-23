@@ -171,6 +171,13 @@ struct srp_rdma_ch {
 	 * command processing. Try to keep them packed into cachelines.
 	 */
 
+	struct completion	done;
+	int			status;
+
+	struct ib_sa_path_rec	path;
+	struct ib_sa_query     *path_query;
+	int			path_query_id;
+
 	struct ib_cm_id	       *cm_id;
 	struct srp_iu	       **tx_ring;
 	struct srp_iu	       **rx_ring;
@@ -199,6 +206,7 @@ struct srp_target_port {
 	bool			allow_ext_sg;
 
 	/* other member variables */
+	union ib_gid		sgid;
 	__be64			id_ext;
 	__be64			ioc_guid;
 	__be64			service_id;
@@ -215,10 +223,7 @@ struct srp_target_port {
 	int			comp_vector;
 	int			tl_retry_count;
 
-	struct ib_sa_path_rec	path;
 	__be16			orig_dgid[8];
-	struct ib_sa_query     *path_query;
-	int			path_query_id;
 	__be16			pkey;
 
 	u32			rq_tmo_jiffies;
@@ -230,8 +235,6 @@ struct srp_target_port {
 	struct work_struct	remove_work;
 
 	struct list_head	list;
-	struct completion	done;
-	int			status;
 	bool			qp_in_error;
 };
 

@@ -76,11 +76,11 @@ static unsigned int cmd_sg_entries;
 static unsigned int indirect_sg_entries;
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static int allow_ext_sg;
-static int prefer_frwr;
+static int prefer_fr;
 static int register_always;
 #else
 static bool allow_ext_sg;
-static bool prefer_frwr;
+static bool prefer_fr;
 static bool register_always;
 #endif
 static int topspin_workarounds = 1;
@@ -109,12 +109,12 @@ MODULE_PARM_DESC(topspin_workarounds,
 		 "Enable workarounds for Topspin/Cisco SRP target bugs if != 0");
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-module_param(prefer_frwr, int, 0444);
+module_param(prefer_fr, int, 0444);
 #else
-module_param(prefer_frwr, bool, 0444);
+module_param(prefer_fr, bool, 0444);
 #endif
-MODULE_PARM_DESC(prefer_frwr,
-		 "Whether to use FRWR if both FMR and FRWR are available");
+MODULE_PARM_DESC(prefer_fr,
+"Whether to use fast registration if both FMR and fast registration are supported");
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 module_param(register_always, int, 0444);
@@ -1195,7 +1195,7 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 		}
 	}
 
-	/* Reallocate requests to reset the MR state in FRWR mode. */
+	/* Reallocate requests to reset the MR state in FR mode. */
 	srp_free_req_data(target);
 	if (ret == 0)
 		ret = srp_alloc_req_data(target);
@@ -3485,7 +3485,7 @@ static void srp_add_one(struct ib_device *device)
 	struct ib_device_attr *dev_attr;
 	struct srp_host *host;
 	int mr_page_shift, s, e, p;
-	bool have_fmr = false, have_frwr = false;
+	bool have_fmr = false, have_fr = false;
 
 	dev_attr = kmalloc(sizeof *dev_attr, GFP_KERNEL);
 	if (!dev_attr)
@@ -3505,17 +3505,17 @@ static void srp_add_one(struct ib_device *device)
 		have_fmr = true;
 	}
 	if (dev_attr->device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS)
-		have_frwr = true;
-	if (!have_fmr && !have_frwr) {
+		have_fr = true;
+	if (!have_fmr && !have_fr) {
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-		dev_err(device->dma_device, "neither FMR nor FRWR is supported\n");
+		dev_err(device->dma_device, "neither FMR nor FR is supported\n");
 #else
-		dev_err(&device->dev, "neither FMR nor FRWR is supported\n");
+		dev_err(&device->dev, "neither FMR nor FR is supported\n");
 #endif
 		goto free_dev;
 	}
 
-	srp_dev->use_fast_reg = have_frwr && (!have_fmr || prefer_frwr);
+	srp_dev->use_fast_reg = have_fr && (!have_fmr || prefer_fr);
 
 	/*
 	 * Use the smallest page size supported by the HCA, down to a

@@ -240,7 +240,7 @@ struct srp_fr_desc {
 };
 
 /**
- * struct srp_fr_pool - pool of FR descriptors
+ * struct srp_fr_pool - pool of fast registration descriptors
  *
  * An entry is available for allocation if and only if it occurs in @free_list.
  *

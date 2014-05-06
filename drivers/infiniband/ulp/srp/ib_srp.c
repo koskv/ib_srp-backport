@@ -1426,8 +1426,8 @@ static int srp_map_sg(struct srp_map_state *state,
 	int i;
 	bool use_memory_registration;
 
-	state->desc		= req->indirect_desc;
-	state->pages		= req->map_page;
+	state->desc	= req->indirect_desc;
+	state->pages	= req->map_page;
 	if (dev->use_fast_reg) {
 		req->fr.invalidate_rkeys = true;
 		state->next_fmr = req->fmr.fmr_list;

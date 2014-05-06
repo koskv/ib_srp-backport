@@ -234,9 +234,9 @@ struct srp_iu {
  * @frpl:  Fast registration page list.
  */
 struct ib_fr_desc {
-       struct list_head                entry;
-       struct ib_mr                    *mr;
-       struct ib_fast_reg_page_list    *frpl;
+	struct list_head		entry;
+	struct ib_mr			*mr;
+	struct ib_fast_reg_page_list	*frpl;
 };
 
 /**
@@ -250,10 +250,10 @@ struct ib_fr_desc {
  * @desc:      Fast registration descriptor pool.
  */
 struct ib_fr_pool {
-       int                     size;
-       spinlock_t              lock;
-       struct list_head        free_list;
-       struct ib_fr_desc       desc[0];
+	int			size;
+	spinlock_t		lock;
+	struct list_head	free_list;
+	struct ib_fr_desc	desc[0];
 };
 
 /**

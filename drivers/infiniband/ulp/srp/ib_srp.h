@@ -137,7 +137,7 @@ struct srp_request {
 			struct ib_pool_fmr **fmr_list;
 		} fmr;
 		struct {
-			struct ib_fr_desc  **fr_list;
+			struct srp_fr_desc **fr_list;
 			bool		     invalidate_rkeys;
 		} fr;
 	};
@@ -157,7 +157,7 @@ struct srp_target_port {
 	struct ib_cq	       *send_cq ____cacheline_aligned_in_smp;
 	struct ib_cq	       *recv_cq;
 	struct ib_qp	       *qp;
-	struct ib_fr_pool      *fr_pool;
+	struct srp_fr_pool     *fr_pool;
 	int			mr_max_size;
 	u32			lkey;
 	u32			rkey;
@@ -228,19 +228,19 @@ struct srp_iu {
 };
 
 /**
- * struct ib_fr_desc - fast registration work request arguments
+ * struct srp_fr_desc - fast registration work request arguments
  * @entry: Entry in free_list.
  * @mr:    Memory region.
  * @frpl:  Fast registration page list.
  */
-struct ib_fr_desc {
+struct srp_fr_desc {
 	struct list_head		entry;
 	struct ib_mr			*mr;
 	struct ib_fast_reg_page_list	*frpl;
 };
 
 /**
- * struct ib_fr_pool - pool of FR descriptors
+ * struct srp_fr_pool - pool of FR descriptors
  *
  * An entry is available for allocation if and only if it occurs in @free_list.
  *
@@ -249,11 +249,11 @@ struct ib_fr_desc {
  * @free_list: List of free descriptors.
  * @desc:      Fast registration descriptor pool.
  */
-struct ib_fr_pool {
+struct srp_fr_pool {
 	int			size;
 	spinlock_t		lock;
 	struct list_head	free_list;
-	struct ib_fr_desc	desc[0];
+	struct srp_fr_desc	desc[0];
 };
 
 /**
@@ -276,7 +276,7 @@ struct ib_fr_pool {
 struct srp_map_state {
 	union {
 		struct ib_pool_fmr **next_fmr;
-		struct ib_fr_desc  **next_fr;
+		struct srp_fr_desc **next_fr;
 	};
 	struct srp_direct_buf  *desc;
 	u64		       *pages;

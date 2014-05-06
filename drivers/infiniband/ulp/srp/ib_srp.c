@@ -351,13 +351,13 @@ static int srp_new_cm_id(struct srp_target_port *target)
 }
 
 /**
- * ib_destroy_fr_pool() - free the resources owned by a pool
+ * srp_destroy_fr_pool() - free the resources owned by a pool
  * @pool: Fast registration pool to be destroyed.
  */
-static void ib_destroy_fr_pool(struct ib_fr_pool *pool)
+static void srp_destroy_fr_pool(struct srp_fr_pool *pool)
 {
 	int i;
-	struct ib_fr_desc *d;
+	struct srp_fr_desc *d;
 
 	if (!pool)
 		return;
@@ -372,18 +372,18 @@ static void ib_destroy_fr_pool(struct ib_fr_pool *pool)
 }
 
 /**
- * ib_create_fr_pool() - allocate and initialize a pool for fast registration
+ * srp_create_fr_pool() - allocate and initialize a pool for fast registration
  * @device:            IB device to allocate fast registration descriptors for.
  * @pd:                Protection domain associated with the FR descriptors.
  * @pool_size:         Number of descriptors to allocate.
  * @max_page_list_len: Maximum fast registration work request page list length.
  */
-static struct ib_fr_pool *ib_create_fr_pool(struct ib_device *device,
-					    struct ib_pd *pd, int pool_size,
-					    int max_page_list_len)
+static struct srp_fr_pool *srp_create_fr_pool(struct ib_device *device,
+					      struct ib_pd *pd, int pool_size,
+					      int max_page_list_len)
 {
-	struct ib_fr_pool *pool;
-	struct ib_fr_desc *d;
+	struct srp_fr_pool *pool;
+	struct srp_fr_desc *d;
 	struct ib_mr *mr;
 	struct ib_fast_reg_page_list *frpl;
 	int i, ret = -EINVAL;
@@ -391,8 +391,8 @@ static struct ib_fr_pool *ib_create_fr_pool(struct ib_device *device,
 	if (pool_size <= 0)
 		goto err;
 	ret = -ENOMEM;
-	pool = kzalloc(sizeof(struct ib_fr_pool) +
-		       pool_size * sizeof(struct ib_fr_desc), GFP_KERNEL);
+	pool = kzalloc(sizeof(struct srp_fr_pool) +
+		       pool_size * sizeof(struct srp_fr_desc), GFP_KERNEL);
 	if (!pool)
 		goto err;
 	pool->size = pool_size;
@@ -419,7 +419,7 @@ out:
 	return pool;
 
 destroy_pool:
-	ib_destroy_fr_pool(pool);
+	srp_destroy_fr_pool(pool);
 
 err:
 	pool = ERR_PTR(ret);
@@ -427,12 +427,12 @@ err:
 }
 
 /**
- * ib_fr_pool_get() - obtain a descriptor suitable for fast registration
+ * srp_fr_pool_get() - obtain a descriptor suitable for fast registration
  * @pool: Pool to obtain descriptor from.
  */
-static struct ib_fr_desc *ib_fr_pool_get(struct ib_fr_pool *pool)
+static struct srp_fr_desc *srp_fr_pool_get(struct srp_fr_pool *pool)
 {
-	struct ib_fr_desc *d = NULL;
+	struct srp_fr_desc *d = NULL;
 	unsigned long flags;
 
 	spin_lock_irqsave(&pool->lock, flags);
@@ -446,7 +446,7 @@ static struct ib_fr_desc *ib_fr_pool_get(struct ib_fr_pool *pool)
 }
 
 /**
- * ib_fr_pool_put() - put an FR descriptor back in the free list
+ * srp_fr_pool_put() - put an FR descriptor back in the free list
  * @pool: Pool the descriptor was allocated from.
  * @desc: Pointer to an array of fast registration descriptor pointers.
  * @n:    Number of descriptors to put back.
@@ -454,8 +454,8 @@ static struct ib_fr_desc *ib_fr_pool_get(struct ib_fr_pool *pool)
  * Note: The caller must already have queued an invalidation request for
  * desc->mr->rkey before calling this function.
  */
-static void ib_fr_pool_put(struct ib_fr_pool *pool, struct ib_fr_desc **desc,
-			   int n)
+static void srp_fr_pool_put(struct srp_fr_pool *pool, struct srp_fr_desc **desc,
+			    int n)
 {
 	unsigned long flags;
 	int i;
@@ -469,7 +469,7 @@ static void ib_fr_pool_put(struct ib_fr_pool *pool, struct ib_fr_desc **desc,
 static void srp_alloc_fr_pool(struct srp_target_port *target)
 {
 	struct srp_device *dev = target->srp_host->srp_dev;
-	struct ib_fr_pool *pool;
+	struct srp_fr_pool *pool;
 	int max_pages_per_mr, ret = 0;
 
 	target->fr_pool = NULL;
@@ -477,8 +477,8 @@ static void srp_alloc_fr_pool(struct srp_target_port *target)
 	for (max_pages_per_mr = SRP_MAX_PAGES_PER_MR;
 	     max_pages_per_mr >= SRP_MIN_PAGES_PER_MR;
 	     max_pages_per_mr /= 2) {
-		pool = ib_create_fr_pool(dev->dev, dev->pd,
-					 SRP_MDESC_PER_POOL, max_pages_per_mr);
+		pool = srp_create_fr_pool(dev->dev, dev->pd,
+					  SRP_MDESC_PER_POOL, max_pages_per_mr);
 		if (!IS_ERR(pool)) {
 			target->fr_pool = pool;
 			target->mr_max_size =
@@ -556,7 +556,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 	target->send_cq = send_cq;
 
 	if (dev->use_fast_reg) {
-		ib_destroy_fr_pool(target->fr_pool);
+		srp_destroy_fr_pool(target->fr_pool);
 		srp_alloc_fr_pool(target);
 	} else {
 		target->mr_max_size = dev->fmr_max_size;
@@ -593,7 +593,7 @@ static void srp_free_target_ib(struct srp_target_port *target)
 	ib_destroy_cq(target->recv_cq);
 
 	if (dev->use_fast_reg)
-		ib_destroy_fr_pool(target->fr_pool);
+		srp_destroy_fr_pool(target->fr_pool);
 
 	target->qp = NULL;
 	target->send_cq = target->recv_cq = NULL;
@@ -1032,15 +1032,15 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 		return;
 
 	if (dev->use_fast_reg) {
-		struct ib_fr_desc **pfr;
+		struct srp_fr_desc **pfr;
 
 		if (req->fr.invalidate_rkeys)
 			for (i = req->nmdesc, pfr = req->fr.fr_list; i > 0;
 			     i--, pfr++)
 				srp_inv_rkey(target, (*pfr)->mr->rkey);
 		if (req->nmdesc)
-			ib_fr_pool_put(target->fr_pool, req->fr.fr_list,
-				       req->nmdesc);
+			srp_fr_pool_put(target->fr_pool, req->fr.fr_list,
+					req->nmdesc);
 	} else {
 		struct ib_pool_fmr **pfmr;
 
@@ -1266,10 +1266,10 @@ static int srp_map_finish_fr(struct srp_map_state *state,
 	struct srp_device *dev = target->srp_host->srp_dev;
 	struct ib_send_wr *bad_wr;
 	struct ib_send_wr wr;
-	struct ib_fr_desc *desc;
+	struct srp_fr_desc *desc;
 	u32 rkey;
 
-	desc = ib_fr_pool_get(target->fr_pool);
+	desc = srp_fr_pool_get(target->fr_pool);
 	if (!desc)
 		return -ENOMEM;
 

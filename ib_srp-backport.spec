@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.22
+Version:	2.0.23
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -23,7 +23,7 @@ Requires:	/sbin/depmod /usr/bin/find %{kernel_rpm}
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-build-%(%{__id_u} -n)
 
 %description
-Backport of the Linux IB/SRP 3.14 kernel module to earlier kernel versions.
+Backport of the Linux IB/SRP 3.16 kernel module to earlier kernel versions.
 
 %prep
 rm -rf $RPM_BUILD_ROOT
@@ -69,6 +69,28 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon May 19 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.23
+- [FMR] Improved scalability by changing FMR support from one FMR pool per
+  HCA into one FMR pool per SRP target connection. The FMR pool size has
+  been reduced from 1024 to the SCSI host queue size. This change reduces
+  memory consumption if the number of connections is small and improves
+  performance if multiple SRP paths are used.
+- The maximum number of pages per memory registration pool is now derived
+  from the HCA device attributes instead of using a loop that iterates until
+  a supported size is found.
+- The SCSI host queue size (/sys/class/scsi_host/host*/can_queue) is
+  decreased dynamically in the (unlikely) case where the number of memory
+  descriptors is exhausted. This scenario can only be triggered with
+  fragmented SG_IO requests and a high queue depth. Neither fio nor the
+  Linux page cache can generate such a workload.
+- Fixed a sporadic crash triggered by cable pulling. See also
+  http://thread.gmane.org/gmane.linux.drivers.rdma/19068/focus=19069 for
+  more information.
+- [FR] An error message is logged and the connection is reestablished if a
+  "local invalidation" work request fails.
+- [FR] Renamed the kernel module parameter "prefer_frwr" into "prefer_fr"
+  (FR = fast registration).
+- Reworked the code in the Makefile for detecting the OFED version.
 * Tue Mar 25 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.22
 - Reworked FRWR support (FRWR = fast registration work request; an alternative
   for FMR to register memory with an HCA). Added support for non-contiguous

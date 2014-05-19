@@ -1034,10 +1034,8 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 	if (dev->use_fast_reg) {
 		struct srp_fr_desc **pfr;
 
-		if (req->fr.invalidate_rkeys)
-			for (i = req->nmdesc, pfr = req->fr.fr_list; i > 0;
-			     i--, pfr++)
-				srp_inv_rkey(target, (*pfr)->mr->rkey);
+		for (i = req->nmdesc, pfr = req->fr.fr_list; i > 0; i--, pfr++)
+			srp_inv_rkey(target, (*pfr)->mr->rkey);
 		if (req->nmdesc)
 			srp_fr_pool_put(target->fr_pool, req->fr.fr_list,
 					req->nmdesc);
@@ -1173,38 +1171,22 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 	 * callbacks will have finished before a new QP is allocated.
 	 */
 	ret = srp_new_cm_id(target);
-	/*
-	 * Whether or not creating a new CM ID succeeded, create a new
-	 * QP. This guarantees that all completion callback function
-	 * invocations have finished before request resetting starts.
-	 */
-	if (ret == 0)
-		ret = srp_create_target_ib(target);
-	else
-		srp_create_target_ib(target);
 
-	if (target->req_ring) {
-		for (i = 0; i < target->req_ring_size; ++i) {
-			struct srp_request *req = &target->req_ring[i];
-			/*
-			 * Avoid that srp_finish_req() tries to use the QP since
-			 * QP reallocation could have failed.
-			 */
-			if (target->srp_host->srp_dev->use_fast_reg)
-				req->fr.invalidate_rkeys = false;
-			srp_finish_req(target, req, NULL, DID_RESET << 16);
-		}
+	for (i = 0; i < target->req_ring_size; ++i) {
+		struct srp_request *req = &target->req_ring[i];
+		srp_finish_req(target, req, NULL, DID_RESET << 16);
 	}
 
-	/* Reallocate requests to reset the MR state in FR mode. */
-	srp_free_req_data(target);
-	if (ret == 0)
-		ret = srp_alloc_req_data(target);
+	/*
+	 * Whether or not creating a new CM ID succeeded, create a new
+	 * QP. This guarantees that all callback functions for the old QP have
+	 * finished before any send requests are posted on the new QP.
+	 */
+	ret += srp_create_target_ib(target);
 
 	INIT_LIST_HEAD(&target->free_tx);
-	if (target->tx_ring)
-		for (i = 0; i < target->queue_size; ++i)
-			list_add(&target->tx_ring[i]->list, &target->free_tx);
+	for (i = 0; i < target->queue_size; ++i)
+		list_add(&target->tx_ring[i]->list, &target->free_tx);
 
 	if (ret == 0)
 		ret = srp_connect_target(target);
@@ -1429,7 +1411,6 @@ static int srp_map_sg(struct srp_map_state *state,
 	state->desc	= req->indirect_desc;
 	state->pages	= req->map_page;
 	if (dev->use_fast_reg) {
-		req->fr.invalidate_rkeys = true;
 		state->next_fmr = req->fmr.fmr_list;
 		use_memory_registration = !!target->fr_pool;
 	} else {

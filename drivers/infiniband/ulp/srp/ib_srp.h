@@ -138,7 +138,6 @@ struct srp_request {
 		} fmr;
 		struct {
 			struct srp_fr_desc **fr_list;
-			bool		     invalidate_rkeys;
 		} fr;
 	};
 };

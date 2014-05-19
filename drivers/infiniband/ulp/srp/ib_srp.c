@@ -559,7 +559,7 @@ static int srp_create_target_ib(struct srp_target_port *target)
 		srp_destroy_fr_pool(target->fr_pool);
 		srp_alloc_fr_pool(target);
 	} else {
-		target->mr_max_size = dev->fmr_max_size;
+		target->mr_max_size = dev->mr_max_size;
 	}
 
 	kfree(init_attr);
@@ -806,9 +806,9 @@ static void srp_free_req_data(struct srp_target_port *target)
 	for (i = 0; i < target->req_ring_size; ++i) {
 		req = &target->req_ring[i];
 		if (dev->use_fast_reg)
-			kfree(req->fr.fr_list);
+			kfree(req->fr_list);
 		else
-			kfree(req->fmr.fmr_list);
+			kfree(req->fmr_list);
 		kfree(req->map_page);
 		if (req->indirect_dma_addr) {
 			ib_dma_unmap_single(ibdev, req->indirect_dma_addr,
@@ -845,9 +845,9 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 		if (!mr_list)
 			goto out;
 		if (dev->use_fast_reg)
-			req->fr.fr_list = mr_list;
+			req->fr_list = mr_list;
 		else
-			req->fmr.fmr_list = mr_list;
+			req->fmr_list = mr_list;
 		req->map_page = kmalloc(SRP_MAX_PAGES_PER_MR * sizeof(void *),
 					GFP_KERNEL);
 		if (!req->map_page)
@@ -1034,15 +1034,15 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 	if (dev->use_fast_reg) {
 		struct srp_fr_desc **pfr;
 
-		for (i = req->nmdesc, pfr = req->fr.fr_list; i > 0; i--, pfr++)
+		for (i = req->nmdesc, pfr = req->fr_list; i > 0; i--, pfr++)
 			srp_inv_rkey(target, (*pfr)->mr->rkey);
 		if (req->nmdesc)
-			srp_fr_pool_put(target->fr_pool, req->fr.fr_list,
+			srp_fr_pool_put(target->fr_pool, req->fr_list,
 					req->nmdesc);
 	} else {
 		struct ib_pool_fmr **pfmr;
 
-		for (i = req->nmdesc, pfmr = req->fmr.fmr_list; i > 0;
+		for (i = req->nmdesc, pfmr = req->fmr_list; i > 0;
 		     i--, pfmr++)
 			ib_fmr_pool_unmap(*pfmr);
 	}
@@ -1411,10 +1411,10 @@ static int srp_map_sg(struct srp_map_state *state,
 	state->desc	= req->indirect_desc;
 	state->pages	= req->map_page;
 	if (dev->use_fast_reg) {
-		state->next_fmr = req->fmr.fmr_list;
+		state->next_fmr = req->fmr_list;
 		use_memory_registration = !!target->fr_pool;
 	} else {
-		state->next_fr = req->fr.fr_list;
+		state->next_fr = req->fr_list;
 		use_memory_registration = !!dev->fmr_pool;
 	}
 
@@ -3453,7 +3453,7 @@ static void srp_alloc_fmr_pool(struct srp_device *srp_dev)
 		pool = ib_create_fmr_pool(srp_dev->pd, &fmr_param);
 		if (!IS_ERR(pool)) {
 			srp_dev->fmr_pool = pool;
-			srp_dev->fmr_max_size =
+			srp_dev->mr_max_size =
 				srp_dev->mr_page_size * max_pages_per_mr;
 			break;
 		}

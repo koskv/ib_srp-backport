@@ -89,8 +89,8 @@ enum srp_iu_type {
 /*
  * @mr_page_mask: HCA memory registration page mask.
  * @mr_page_size: HCA memory registration page size.
- * @fmr_max_size: Maximum size of a single HCA memory registration request
- *                when using FMR.
+ * @mr_max_size: Maximum size in bytes of a single FMR / FR registration
+ *   request.
  */
 struct srp_device {
 	struct list_head	dev_list;
@@ -100,7 +100,7 @@ struct srp_device {
 	struct ib_fmr_pool     *fmr_pool;
 	u64			mr_page_mask;
 	int			mr_page_size;
-	int			fmr_max_size;
+	int			mr_max_size;
 	bool			use_fast_reg;
 };
 
@@ -133,12 +133,8 @@ struct srp_request {
 	short			nmdesc;
 	short			index;
 	union {
-		struct {
-			struct ib_pool_fmr **fmr_list;
-		} fmr;
-		struct {
-			struct srp_fr_desc **fr_list;
-		} fr;
+		struct ib_pool_fmr **fmr_list;
+		struct srp_fr_desc **fr_list;
 	};
 };
 

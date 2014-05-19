@@ -414,6 +414,7 @@ static struct srp_fr_pool *srp_create_fr_pool(struct ib_device *device,
 	if (!pool)
 		goto err;
 	pool->size = pool_size;
+	pool->max_page_list_len = max_page_list_len;
 	spin_lock_init(&pool->lock);
 	INIT_LIST_HEAD(&pool->free_list);
 
@@ -855,8 +856,8 @@ static void srp_free_req_data(struct srp_target_port *target)
 
 static int srp_alloc_req_data(struct srp_target_port *target)
 {
-	struct srp_device *dev = target->srp_host->srp_dev;
-	struct ib_device *ibdev = dev->dev;
+	struct srp_device *srp_dev = target->srp_host->srp_dev;
+	struct ib_device *ibdev = srp_dev->dev;
 	struct srp_request *req;
 	void *mr_list;
 	dma_addr_t dma_addr;
@@ -875,7 +876,7 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 				  GFP_KERNEL);
 		if (!mr_list)
 			goto out;
-		if (dev->use_fast_reg)
+		if (srp_dev->use_fast_reg)
 			req->fr_list = mr_list;
 		else
 			req->fmr_list = mr_list;
@@ -1055,7 +1056,7 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 {
 	struct srp_device *dev = target->srp_host->srp_dev;
 	struct ib_device *ibdev = dev->dev;
-	int i;
+	int i, res;
 
 	if (!scsi_sglist(scmnd) ||
 	    (scmnd->sc_data_direction != DMA_TO_DEVICE &&
@@ -1065,16 +1066,23 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 	if (dev->use_fast_reg) {
 		struct srp_fr_desc **pfr;
 
-		for (i = req->nmdesc, pfr = req->fr_list; i > 0; i--, pfr++)
-			srp_inv_rkey(target, (*pfr)->mr->rkey);
+		for (i = req->nmdesc, pfr = req->fr_list; i > 0; i--, pfr++) {
+			res = srp_inv_rkey(target, (*pfr)->mr->rkey);
+			if (res < 0) {
+				shost_printk(KERN_ERR, target->scsi_host, PFX
+				  "Queueing INV WR for rkey %#x failed (%d)\n",
+				  (*pfr)->mr->rkey, res);
+				queue_work(system_long_wq,
+					   &target->tl_err_work);
+			}
+		}
 		if (req->nmdesc)
 			srp_fr_pool_put(target->fr_pool, req->fr_list,
 					req->nmdesc);
 	} else {
 		struct ib_pool_fmr **pfmr;
 
-		for (i = req->nmdesc, pfmr = req->fmr_list; i > 0;
-		     i--, pfmr++)
+		for (i = req->nmdesc, pfmr = req->fmr_list; i > 0; i--, pfmr++)
 			ib_fmr_pool_unmap(*pfmr);
 	}
 
@@ -1330,8 +1338,11 @@ static int srp_finish_mapping(struct srp_map_state *state,
 			srp_map_finish_fr(state, target) :
 			srp_map_finish_fmr(state, target);
 
-	state->npages = 0;
-	state->dma_len = 0;
+	if (ret == 0) {
+		state->npages = 0;
+		state->dma_len = 0;
+	}
+
 	return ret;
 }
 
@@ -1370,10 +1381,10 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 	}
 
 	/*
-	 * Since not all IB HW drivers support non-zero page offsets for FMR,
-	 * if we start at an offset into a page, don't merge into the current
-	 * FMR mapping. Finish it out, and use the kernel's MR for this sg
-	 * entry.
+	 * Since not all RDMA HW drivers support non-zero page offsets for
+	 * FMR, if we start at an offset into a page, don't merge into the
+	 * current FMR mapping. Finish it out, and use the kernel's MR for
+	 * this sg entry.
 	 */
 	if ((!dev->use_fast_reg && dma_addr & ~dev->mr_page_mask) ||
 	    dma_len > dev->mr_max_size) {
@@ -1415,7 +1426,8 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 		dma_len -= len;
 	}
 
-	/* If the last entry of the FMR wasn't a full page, then we need to
+	/*
+	 * If the last entry of the MR wasn't a full page, then we need to
 	 * close it out and start a new one -- we can only merge at page
 	 * boundries.
 	 */
@@ -1441,10 +1453,10 @@ static int srp_map_sg(struct srp_map_state *state,
 	state->desc	= req->indirect_desc;
 	state->pages	= req->map_page;
 	if (dev->use_fast_reg) {
-		state->next_fmr = req->fmr_list;
+		state->next_fr = req->fr_list;
 		use_memory_registration = !!target->fr_pool;
 	} else {
-		state->next_fr = req->fr_list;
+		state->next_fmr = req->fmr_list;
 		use_memory_registration = !!target->fmr_pool;
 	}
 
@@ -1485,7 +1497,7 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 {
 	struct scatterlist *scat;
 	struct srp_cmd *cmd = req->cmd->buf;
-	int len, nents, count, res;
+	int len, nents, count;
 	struct srp_device *dev;
 	struct ib_device *ibdev;
 	struct srp_map_state state;
@@ -1544,9 +1556,7 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_target_port *target,
 				   target->indirect_size, DMA_TO_DEVICE);
 
 	memset(&state, 0, sizeof(state));
-	res = srp_map_sg(&state, target, req, scat, count);
-	if (res < 0)
-		return res;
+	srp_map_sg(&state, target, req, scat, count);
 
 	/* We've mapped the request, now pull as much of the indirect
 	 * descriptor table as we can into the command buffer. If this
@@ -1890,11 +1900,11 @@ static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
 {
 	if (target->connected && !target->qp_in_error) {
 		if (wr_id & LOCAL_INV_WR_ID_MASK) {
-			shost_printk(KERN_ERR, target->scsi_host,
+			shost_printk(KERN_ERR, target->scsi_host, PFX
 				     "LOCAL_INV failed with status %d\n",
 				     wc_status);
 		} else if (wr_id & FAST_REG_WR_ID_MASK) {
-			shost_printk(KERN_ERR, target->scsi_host,
+			shost_printk(KERN_ERR, target->scsi_host, PFX
 				     "FAST_REG_MR failed status %d\n",
 				     wc_status);
 		} else {
@@ -2087,6 +2097,12 @@ err_unmap:
 
 err_iu:
 	srp_put_tx_iu(target, iu, SRP_IU_CMD);
+
+	/*
+	 * Avoid that the loops that iterate over the request ring can
+	 * encounter a dangling SCSI command pointer.
+	 */
+	req->scmnd = NULL;
 
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&req->list, &target->free_reqs);
@@ -3238,7 +3254,8 @@ static ssize_t srp_create_target(struct device *dev,
 		container_of(dev, struct srp_host, dev);
 	struct Scsi_Host *target_host;
 	struct srp_target_port *target;
-	struct ib_device *ibdev = host->srp_dev->dev;
+	struct srp_device *srp_dev = host->srp_dev;
+	struct ib_device *ibdev = srp_dev->dev;
 	int ret;
 
 	target_host = scsi_host_alloc(&srp_template,
@@ -3302,7 +3319,7 @@ static ssize_t srp_create_target(struct device *dev,
 
 	if (!target->fmr_pool && !target->allow_ext_sg &&
 	    target->cmd_sg_cnt < target->sg_tablesize) {
-		pr_warn("No FMR pool and no external indirect descriptors, limiting sg_tablesize to cmd_sg_cnt\n");
+		pr_warn("No MR pool and no external indirect descriptors, limiting sg_tablesize to cmd_sg_cnt\n");
 		target->sg_tablesize = target->cmd_sg_cnt;
 	}
 
@@ -3520,7 +3537,7 @@ static void srp_add_one(struct ib_device *device)
 	}
 	srp_dev->mr_max_size	= srp_dev->mr_page_size *
 				   srp_dev->max_pages_per_mr;
- 
+
 	INIT_LIST_HEAD(&srp_dev->dev_list);
 
 	srp_dev->dev = device;

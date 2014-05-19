@@ -67,9 +67,6 @@ enum {
 	SRP_TAG_TSK_MGMT	= 1U << 31,
 
 	SRP_MAX_PAGES_PER_MR	= 512,
-	SRP_MIN_PAGES_PER_MR	= 128,
-	SRP_MDESC_PER_POOL	= 1024,
-	SRP_FMR_DIRTY_SIZE	= SRP_MDESC_PER_POOL / 4,
 
 	LOCAL_INV_WR_ID_MASK	= 1,
 	FAST_REG_WR_ID_MASK	= 2,
@@ -119,10 +116,6 @@ struct srp_host {
 	struct mutex		add_target_mutex;
 };
 
-/*
- * In the union below 'fmr' stands for 'Fast Memory Registration' and fr for
- * 'Fast Registration'.
- */
 struct srp_request {
 	struct list_head	list;
 	struct scsi_cmnd       *scmnd;
@@ -223,7 +216,7 @@ struct srp_iu {
 
 /**
  * struct srp_fr_desc - fast registration work request arguments
- * @entry: Entry in free_list.
+ * @entry: Entry in srp_fr_pool.free_list.
  * @mr:    Memory region.
  * @frpl:  Fast registration page list.
  */
@@ -239,12 +232,14 @@ struct srp_fr_desc {
  * An entry is available for allocation if and only if it occurs in @free_list.
  *
  * @size:      Number of descriptors in this pool.
+ * @max_page_list_len: Maximum fast registration work request page list length.
  * @lock:      Protects free_list.
  * @free_list: List of free descriptors.
  * @desc:      Fast registration descriptor pool.
  */
 struct srp_fr_pool {
 	int			size;
+	int			max_page_list_len;
 	spinlock_t		lock;
 	struct list_head	free_list;
 	struct srp_fr_desc	desc[0];

@@ -8,6 +8,11 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)
 #include <linux/printk.h>     /* pr_warn() -- see also commit 968ab18 */
 #endif
+#if defined(RHEL_MAJOR)
+#define __ethtool_get_settings(dev, cmd) (panic("RHEL misses __ethtool_get_settings()"),0)
+#endif
+#include <linux/rtnetlink.h>
+#include <rdma/rdma_cm.h>
 #include <scsi/scsi_device.h> /* SDEV_TRANSPORT_OFFLINE */
 
 /* <linux/blkdev.h> */
@@ -88,6 +93,22 @@ static inline u32 ib_inc_rkey(u32 rkey)
 	const u32 mask = 0x000000ff;
 	return ((rkey + 1) & mask) | (rkey & ~mask);
 }
+#endif
+
+/* <rdma/rdma_cm.h> */
+/*
+ * commit b26f9b9 (RDMA/cma: Pass QP type into rdma_create_id())
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0) && \
+	!(defined(RHEL_MAJOR) && RHEL_MAJOR -0 >= 6)
+struct rdma_cm_id *rdma_create_id_compat(rdma_cm_event_handler event_handler,
+					 void *context,
+					 enum rdma_port_space ps,
+					 enum ib_qp_type qp_type)
+{
+	return rdma_create_id(event_handler, context, ps);
+}
+#define rdma_create_id rdma_create_id_compat
 #endif
 
 /* <scsi/scsi.h> */

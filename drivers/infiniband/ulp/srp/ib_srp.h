@@ -97,10 +97,10 @@ struct srp_device {
 	struct ib_device       *dev;
 	struct ib_pd	       *pd;
 	struct ib_mr	       *mr;
-	struct ib_fmr_pool     *fmr_pool;
 	u64			mr_page_mask;
 	int			mr_page_size;
 	int			mr_max_size;
+	int			max_pages_per_mr;
 	bool			use_fast_reg;
 };
 
@@ -138,9 +138,6 @@ struct srp_request {
 	};
 };
 
-/*
- * @mr_max_size: Maximum size of a single HCA memory registration request.
- */
 struct srp_target_port {
 	/* These are RW in the hot path, and commonly used together */
 	struct list_head	free_tx;
@@ -152,8 +149,10 @@ struct srp_target_port {
 	struct ib_cq	       *send_cq ____cacheline_aligned_in_smp;
 	struct ib_cq	       *recv_cq;
 	struct ib_qp	       *qp;
-	struct srp_fr_pool     *fr_pool;
-	int			mr_max_size;
+	union {
+		struct ib_fmr_pool     *fmr_pool;
+		struct srp_fr_pool     *fr_pool;
+	};
 	u32			lkey;
 	u32			rkey;
 	enum srp_target_state	state;

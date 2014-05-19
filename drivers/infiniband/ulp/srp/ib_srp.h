@@ -83,6 +83,21 @@ enum srp_iu_type {
 	SRP_IU_RSP,
 };
 
+static inline u32 build_srp_tag(u16 ch, u16 req_idx)
+{
+	return ch << 16 | req_idx;
+}
+
+static inline u16 srp_tag_ch(u32 tag)
+{
+	return tag >> 16;
+}
+
+static inline u16 srp_tag_idx(u32 tag)
+{
+	return tag & ((1 << 16) - 1);
+}
+
 /*
  * @mr_page_mask: HCA memory registration page mask.
  * @mr_page_size: HCA memory registration page size.
@@ -130,7 +145,7 @@ struct srp_request {
 	struct srp_direct_buf  *indirect_desc;
 	dma_addr_t		indirect_dma_addr;
 	short			nmdesc;
-	short			index;
+	uint32_t		tag;
 };
 
 struct srp_rdma_ch {
@@ -172,7 +187,9 @@ struct srp_target_port {
 	spinlock_t		lock;
 
 	/* read only in the hot path */
-	struct srp_rdma_ch	ch;
+	struct srp_rdma_ch	*ch;
+	int			*mq_map;
+	u32			ch_count;
 	u32			lkey;
 	u32			rkey;
 	enum srp_target_state	state;

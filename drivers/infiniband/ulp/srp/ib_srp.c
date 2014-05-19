@@ -1309,14 +1309,13 @@ static int srp_finish_mapping(struct srp_map_state *state,
 	if (state->npages == 0)
 		return 0;
 
-	if (state->npages == 1 && !register_always) {
+	if (state->npages == 1 && !register_always)
 		srp_map_desc(state, state->base_dma_addr, state->dma_len,
 			     target->rkey);
-	} else {
+	else
 		ret = target->srp_host->srp_dev->use_fast_reg ?
 			srp_map_finish_fr(state, target) :
 			srp_map_finish_fmr(state, target);
-	}
 
 	state->npages = 0;
 	state->dma_len = 0;

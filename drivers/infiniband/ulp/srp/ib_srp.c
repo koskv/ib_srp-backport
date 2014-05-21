@@ -545,38 +545,28 @@ static int srp_create_target_ib(struct srp_target_port *target)
 	if (ret)
 		goto err_qp;
 
-	if (dev->use_fast_reg) {
-		if (!target->qp || target->fr_pool) {
-			fr_pool = srp_alloc_fr_pool(target);
-			if (IS_ERR(fr_pool)) {
-				ret = PTR_ERR(fr_pool);
-				shost_printk(KERN_WARNING, target->scsi_host,
-					PFX "FR pool allocation failed (%d)\n",
-					ret);
-				if (target->qp)
-					goto err_qp;
-				fr_pool = NULL;
-			}
-			if (target->fr_pool)
-				srp_destroy_fr_pool(target->fr_pool);
-			target->fr_pool = fr_pool;
+	if (dev->use_fast_reg && dev->has_fr) {
+		fr_pool = srp_alloc_fr_pool(target);
+		if (IS_ERR(fr_pool)) {
+			ret = PTR_ERR(fr_pool);
+			shost_printk(KERN_WARNING, target->scsi_host, PFX
+				     "FR pool allocation failed (%d)\n", ret);
+			goto err_qp;
 		}
-	} else {
-		if (!target->qp || target->fmr_pool) {
-			fmr_pool = srp_alloc_fmr_pool(target);
-			if (IS_ERR(fmr_pool)) {
-				ret = PTR_ERR(fmr_pool);
-				shost_printk(KERN_WARNING, target->scsi_host,
-					PFX "FMR pool allocation failed (%d)\n",
-					ret);
-				if (target->qp)
-					goto err_qp;
-				fmr_pool = NULL;
-			}
-			if (target->fmr_pool)
-				ib_destroy_fmr_pool(target->fmr_pool);
-			target->fmr_pool = fmr_pool;
+		if (target->fr_pool)
+			srp_destroy_fr_pool(target->fr_pool);
+		target->fr_pool = fr_pool;
+	} else if (!dev->use_fast_reg && dev->has_fmr) {
+		fmr_pool = srp_alloc_fmr_pool(target);
+		if (IS_ERR(fmr_pool)) {
+			ret = PTR_ERR(fmr_pool);
+			shost_printk(KERN_WARNING, target->scsi_host, PFX
+				     "FMR pool allocation failed (%d)\n", ret);
+			goto err_qp;
 		}
+		if (target->fmr_pool)
+			ib_destroy_fmr_pool(target->fmr_pool);
+		target->fmr_pool = fmr_pool;
 	}
 
 	if (target->qp)
@@ -880,8 +870,8 @@ static int srp_alloc_req_data(struct srp_target_port *target)
 			req->fr_list = mr_list;
 		else
 			req->fmr_list = mr_list;
-		req->map_page = kmalloc(SRP_MAX_PAGES_PER_MR * sizeof(void *),
-					GFP_KERNEL);
+		req->map_page = kmalloc(srp_dev->max_pages_per_mr *
+					sizeof(void *), GFP_KERNEL);
 		if (!req->map_page)
 			goto out;
 		req->indirect_desc = kmalloc(target->indirect_size, GFP_KERNEL);
@@ -1358,7 +1348,7 @@ static void srp_map_update_start(struct srp_map_state *state,
 static int srp_map_sg_entry(struct srp_map_state *state,
 			    struct srp_target_port *target,
 			    struct scatterlist *sg, int sg_index,
-			    bool use_memory_registration)
+			    bool use_mr)
 {
 	struct srp_device *dev = target->srp_host->srp_dev;
 	struct ib_device *ibdev = dev->dev;
@@ -1370,7 +1360,7 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 	if (!dma_len)
 		return 0;
 
-	if (!use_memory_registration) {
+	if (!use_mr) {
 		/*
 		 * Once we're in direct map mode for a request, we don't
 		 * go back to FMR or FR mode, so no need to update anything
@@ -1408,7 +1398,7 @@ static int srp_map_sg_entry(struct srp_map_state *state,
 
 	while (dma_len) {
 		unsigned offset = dma_addr & ~dev->mr_page_mask;
-		if (state->npages == SRP_MAX_PAGES_PER_MR || offset != 0) {
+		if (state->npages == dev->max_pages_per_mr || offset != 0) {
 			ret = srp_finish_mapping(state, target);
 			if (ret)
 				return ret;
@@ -1448,21 +1438,20 @@ static int srp_map_sg(struct srp_map_state *state,
 	struct ib_device *ibdev = dev->dev;
 	struct scatterlist *sg;
 	int i;
-	bool use_memory_registration;
+	bool use_mr;
 
 	state->desc	= req->indirect_desc;
 	state->pages	= req->map_page;
 	if (dev->use_fast_reg) {
 		state->next_fr = req->fr_list;
-		use_memory_registration = !!target->fr_pool;
+		use_mr = !!target->fr_pool;
 	} else {
 		state->next_fmr = req->fmr_list;
-		use_memory_registration = !!target->fmr_pool;
+		use_mr = !!target->fmr_pool;
 	}
 
 	for_each_sg(scat, sg, count, i) {
-		if (srp_map_sg_entry(state, target, sg, i,
-				     use_memory_registration)) {
+		if (srp_map_sg_entry(state, target, sg, i, use_mr)) {
 			/*
 			 * Memory registration failed, so backtrack to the
 			 * first unmapped entry and continue on without using
@@ -1479,12 +1468,12 @@ backtrack:
 			dma_len = ib_sg_dma_len(ibdev, sg);
 			dma_len -= (state->unmapped_addr - dma_addr);
 			dma_addr = state->unmapped_addr;
-			use_memory_registration = false;
+			use_mr = false;
 			srp_map_desc(state, dma_addr, dma_len, target->rkey);
 		}
 	}
 
-	if (use_memory_registration && srp_finish_mapping(state, target))
+	if (use_mr && srp_finish_mapping(state, target))
 		goto backtrack;
 
 	req->nmdesc = state->nmdesc;
@@ -3300,6 +3289,19 @@ static ssize_t srp_create_target(struct device *dev,
 		goto err;
 	}
 
+	if (!srp_dev->has_fmr && !srp_dev->has_fr && !target->allow_ext_sg &&
+	    target->cmd_sg_cnt < target->sg_tablesize) {
+		pr_warn("No MR pool and no external indirect descriptors, limiting sg_tablesize to cmd_sg_cnt\n");
+		target->sg_tablesize = target->cmd_sg_cnt;
+	}
+
+	target_host->sg_tablesize = target->sg_tablesize;
+	target->indirect_size = target->sg_tablesize *
+				sizeof (struct srp_direct_buf);
+	target->max_iu_len = sizeof (struct srp_cmd) +
+			     sizeof (struct srp_indirect_buf) +
+			     target->cmd_sg_cnt * sizeof (struct srp_direct_buf);
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 	INIT_WORK(&target->tl_err_work, srp_tl_err_work, target);
 	INIT_WORK(&target->remove_work, srp_remove_work, target);
@@ -3309,34 +3311,21 @@ static ssize_t srp_create_target(struct device *dev,
 #endif
 	spin_lock_init(&target->lock);
 	INIT_LIST_HEAD(&target->free_tx);
+	ret = srp_alloc_req_data(target);
+	if (ret)
+		goto err_free_mem;
+
 	ret = ib_query_gid(ibdev, host->port, 0, &target->path.sgid);
 	if (ret)
-		goto err;
+		goto err_free_mem;
 
 	ret = srp_create_target_ib(target);
 	if (ret)
-		goto err;
-
-	if (!target->fmr_pool && !target->allow_ext_sg &&
-	    target->cmd_sg_cnt < target->sg_tablesize) {
-		pr_warn("No MR pool and no external indirect descriptors, limiting sg_tablesize to cmd_sg_cnt\n");
-		target->sg_tablesize = target->cmd_sg_cnt;
-	}
-
-	target_host->sg_tablesize = target->sg_tablesize;
-	target->indirect_size = target->sg_tablesize *
-				sizeof(struct srp_direct_buf);
-	target->max_iu_len = sizeof(struct srp_cmd) +
-			     sizeof(struct srp_indirect_buf) +
-			     target->cmd_sg_cnt * sizeof(struct srp_direct_buf);
-
-	ret = srp_alloc_req_data(target);
-	if (ret)
-		goto err_free_ib;
+		goto err_free_mem;
 
 	ret = srp_new_cm_id(target);
 	if (ret)
-		goto err_free_mem;
+		goto err_free_ib;
 
 	ret = srp_connect_target(target);
 	if (ret) {
@@ -3369,11 +3358,11 @@ err_disconnect:
 err_cm_id:
 	ib_destroy_cm_id(target->cm_id);
 
-err_free_mem:
-	srp_free_req_data(target);
-
 err_free_ib:
 	srp_free_target_ib(target);
+
+err_free_mem:
+	srp_free_req_data(target);
 
 err:
 	scsi_host_put(target_host);
@@ -3488,7 +3477,7 @@ static void srp_add_one(struct ib_device *device)
 	struct ib_device_attr *dev_attr;
 	struct srp_host *host;
 	int mr_page_shift, s, e, p;
-	bool have_fmr = false, have_fr = false;
+	u64 max_pages_per_mr;
 
 	dev_attr = kmalloc(sizeof *dev_attr, GFP_KERNEL);
 	if (!dev_attr)
@@ -3503,22 +3492,19 @@ static void srp_add_one(struct ib_device *device)
 	if (!srp_dev)
 		goto free_attr;
 
-	if (device->alloc_fmr && device->dealloc_fmr && device->map_phys_fmr &&
-	    device->unmap_fmr) {
-		have_fmr = true;
-	}
-	if (dev_attr->device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS)
-		have_fr = true;
-	if (!have_fmr && !have_fr) {
+	srp_dev->has_fmr = (device->alloc_fmr && device->dealloc_fmr &&
+			    device->map_phys_fmr && device->unmap_fmr);
+	srp_dev->has_fr = (dev_attr->device_cap_flags &
+			   IB_DEVICE_MEM_MGT_EXTENSIONS);
+	if (!srp_dev->has_fmr && !srp_dev->has_fr)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-		dev_err(device->dma_device, "neither FMR nor FR is supported\n");
+		dev_warn(device->dma_device, "neither FMR nor FR is supported\n");
 #else
-		dev_err(&device->dev, "neither FMR nor FR is supported\n");
+		dev_warn(&device->dev, "neither FMR nor FR is supported\n");
 #endif
-		goto free_dev;
-	}
 
-	srp_dev->use_fast_reg = have_fr && (!have_fmr || prefer_fr);
+	srp_dev->use_fast_reg = (srp_dev->has_fr &&
+				 (!srp_dev->has_fmr || prefer_fr));
 
 	/*
 	 * Use the smallest page size supported by the HCA, down to a
@@ -3528,8 +3514,10 @@ static void srp_add_one(struct ib_device *device)
 	mr_page_shift		= max(12, ffs(dev_attr->page_size_cap) - 1);
 	srp_dev->mr_page_size	= 1 << mr_page_shift;
 	srp_dev->mr_page_mask	= ~((u64) srp_dev->mr_page_size - 1);
+	max_pages_per_mr	= dev_attr->max_mr_size;
+	do_div(max_pages_per_mr, srp_dev->mr_page_size);
 	srp_dev->max_pages_per_mr = min_t(u64, SRP_MAX_PAGES_PER_MR,
-				dev_attr->max_mr_size / srp_dev->mr_page_size);
+					  max_pages_per_mr);
 	if (srp_dev->use_fast_reg) {
 		srp_dev->max_pages_per_mr =
 			min_t(u32, srp_dev->max_pages_per_mr,
@@ -3537,6 +3525,10 @@ static void srp_add_one(struct ib_device *device)
 	}
 	srp_dev->mr_max_size	= srp_dev->mr_page_size *
 				   srp_dev->max_pages_per_mr;
+	pr_debug("%s: mr_page_shift = %d, dev_attr->max_mr_size = %#llx, dev_attr->max_fast_reg_page_list_len = %u, max_pages_per_mr = %d, mr_max_size = %#x\n",
+		 device->name, mr_page_shift, dev_attr->max_mr_size,
+		 dev_attr->max_fast_reg_page_list_len,
+		 srp_dev->max_pages_per_mr, srp_dev->mr_max_size);
 
 	INIT_LIST_HEAD(&srp_dev->dev_list);
 

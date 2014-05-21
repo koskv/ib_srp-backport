@@ -98,6 +98,8 @@ struct srp_device {
 	int			mr_page_size;
 	int			mr_max_size;
 	int			max_pages_per_mr;
+	bool			has_fmr;
+	bool			has_fr;
 	bool			use_fast_reg;
 };
 
@@ -120,15 +122,15 @@ struct srp_request {
 	struct list_head	list;
 	struct scsi_cmnd       *scmnd;
 	struct srp_iu	       *cmd;
+	union {
+		struct ib_pool_fmr **fmr_list;
+		struct srp_fr_desc **fr_list;
+	};
 	u64		       *map_page;
 	struct srp_direct_buf  *indirect_desc;
 	dma_addr_t		indirect_dma_addr;
 	short			nmdesc;
 	short			index;
-	union {
-		struct ib_pool_fmr **fmr_list;
-		struct srp_fr_desc **fr_list;
-	};
 };
 
 struct srp_target_port {

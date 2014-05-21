@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.23
+Version:	2.0.24
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,18 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Wed May 21 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.24
+- Builds again on 32-bit systems ("undefined reference to __udivdi3").
+- Restored support for HCA\'s that neither support FMR nor FR.
+- Fixed a (theoretical ?) memory registration failure that was
+  introduced in Linux kernel v2.6.39 (state->npages being compared
+  against SRP_FMR_SIZE instead of max_pages_per_fmr).
+- Fixed fast_io_fail_tmo=dev_loss_tmo=off behavior.
+- Simplified memory registration pool reallocation code in
+  srp_create_target_ib(). If FMR or FR is supported, an memory
+  registration pool is allocated. If this fails, an error code is
+  returned. If neither FMR nor FR is supported no attempt is made to
+  allocate a memory registration pool.
 * Mon May 19 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.23
 - [FMR] Improved scalability by changing FMR support from one FMR pool per
   HCA into one FMR pool per SRP target connection. The FMR pool size has

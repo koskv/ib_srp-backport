@@ -8,7 +8,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)
 #include <linux/printk.h>     /* pr_warn() -- see also commit 968ab18 */
 #endif
-#if defined(RHEL_MAJOR)
+#if defined(RHEL_MAJOR) && RHEL_MAJOR -0 <= 6
 #define __ethtool_get_settings(dev, cmd) (panic("RHEL misses __ethtool_get_settings()"),0)
 #endif
 #include <linux/rtnetlink.h>

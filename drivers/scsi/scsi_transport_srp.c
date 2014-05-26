@@ -1112,7 +1112,7 @@ static __init int srp_transport_init(void)
 	if (ret)
 		goto unregister_host_class;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-	srp_wq = create_workqueue("srp");
+	srp_wq = create_workqueue("srp_transport");
 	if (IS_ERR(srp_wq)) {
 		ret = PTR_ERR(srp_wq);
 		srp_wq = NULL;

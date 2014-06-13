@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.24
+Version:	2.0.25
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,26 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Fri Jun 13 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.25
+- Added support for immediate data. This change improves write IOPS for
+  small block sizes. This is a protocol change which is only enabled if
+  the target system supports this.
+- Made the CM timeout dependent on the subnet timeout. This reduces the
+  failover time if the subnet timeout on the switch is below the default
+  value (the default value of the subnet_timeout parameter is 18 for
+  OpenSM).
+- Fixed a deadlock that could be triggered by a cable pull.
+- Added multichannel support. Multichannel support is disabled unless
+  the ch_count kernel module parameter is set to another value than one.
+- Added RDMA/CM support. This makes it possible to use the SRP initiator
+  on Ethernet networks with a HCA that either supports RoCE or iWARP.
+- Use the P_Key cache for P_Key lookups.
+- Fixed a RHEL 7 build error.
+- Display the name of the OFED flavor when building on a system on which
+  either the OpenFabrics or the Mellanox OFED distribution has been
+  installed.
+- Added support for building the ib_srp-backport driver against Mellanox
+  OFED installed with --add-kernel-support.
 * Wed May 21 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.24
 - Builds again on 32-bit systems ("undefined reference to __udivdi3").
 - Restored support for HCA\'s that neither support FMR nor FR.

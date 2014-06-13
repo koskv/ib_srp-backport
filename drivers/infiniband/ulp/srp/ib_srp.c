@@ -175,8 +175,13 @@ MODULE_PARM_DESC(dev_loss_tmo,
 		 " if fast_io_fail_tmo has not been set. \"off\" means that"
 		 " this functionality is disabled.");
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static int enable_imm_data;
+module_param(enable_imm_data, int, 0644);
+#else
 static bool enable_imm_data;
 module_param(enable_imm_data, bool, 0644);
+#endif
 
 static unsigned ch_count = 1;
 module_param(ch_count, uint, 0444);
@@ -3821,7 +3826,8 @@ static ssize_t srp_create_target(struct device *dev,
 
 	ret = -ENOMEM;
 	target->ch_count = max_t(unsigned, num_online_nodes(),
-				 min(ch_count ? : UINT_MAX, num_online_cpus()));
+				 min(ch_count ? : UINT_MAX,
+				     (unsigned)num_online_cpus()));
 	target->ch = kcalloc(target->ch_count, sizeof(*target->ch),
 			     GFP_KERNEL);
 	if (!target->ch)

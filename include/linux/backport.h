@@ -8,6 +8,9 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)
 #include <linux/printk.h>     /* pr_warn() -- see also commit 968ab18 */
 #endif
+#if defined(RHEL_MAJOR) && RHEL_MAJOR -0 == 5
+#define vlan_dev_vlan_id(dev) (panic("RHEL 5 misses vlan_dev_vlan_id()"),0)
+#endif
 #if defined(RHEL_MAJOR) && RHEL_MAJOR -0 <= 6
 #define __ethtool_get_settings(dev, cmd) (panic("RHEL misses __ethtool_get_settings()"),0)
 #endif
@@ -29,6 +32,13 @@
 #endif
 
 /* <linux/kernel.h> */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+#ifndef swap
+#define swap(a, b) \
+	do { typeof(a) __tmp = (a); (a) = (b); (b) = __tmp; } while (0)
+#endif
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39) &&  \
 	(!defined(RHEL_MAJOR) || RHEL_MAJOR -0 < 6 || \
 	 RHEL_MAJOR -0 == 6 && RHEL_MINOR -0 < 4)
@@ -54,6 +64,15 @@ static inline int __must_check kstrtoint(const char *s, unsigned int base,
 	if (ret == 0)
 		*res = lres;
 	return ret;
+}
+#endif
+
+/* <linux/inet.h> */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+static inline int in4_pton(const char *src, int srclen, u8 *dst, int delim,
+			   const char **end)
+{
+	return -ENOSYS;
 }
 #endif
 

@@ -176,10 +176,10 @@ MODULE_PARM_DESC(dev_loss_tmo,
 		 " this functionality is disabled.");
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-static int enable_imm_data;
+static int enable_imm_data = true;
 module_param(enable_imm_data, int, 0644);
 #else
-static bool enable_imm_data;
+static bool enable_imm_data = true;
 module_param(enable_imm_data, bool, 0644);
 #endif
 

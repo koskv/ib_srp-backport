@@ -1774,7 +1774,7 @@ static int srp_map_data(struct scsi_cmnd *scmnd, struct srp_rdma_ch *ch,
 
 		req->nmdesc = 0;
 		buf->len = cpu_to_be32(data_len);
-		buf->offset = SRP_IMM_DATA_OUT_OFFSET;
+		buf->offset = cpu_to_be32(SRP_IMM_DATA_OUT_OFFSET);
 		req->cmd->num_sge = count + 1;
 		for_each_sg(scat, sg, count, i) {
 			sge[i].addr   = ib_sg_dma_address(ibdev, sg);

@@ -2960,12 +2960,15 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 {
 	struct srp_target_port *target = host_to_target(scmnd->device->host);
 	struct srp_request *req = (struct srp_request *) scmnd->host_scribble;
-	u16 ch_idx = srp_tag_ch(req->tag);
+	u16 ch_idx;
 	struct srp_rdma_ch *ch;
 	int ret;
 
 	shost_printk(KERN_ERR, target->scsi_host, "SRP abort called\n");
 
+	if (!req)
+		return SUCCESS;
+	ch_idx = srp_tag_ch(req->tag);
 	if (WARN_ON_ONCE(ch_idx >= target->ch_count))
 		return SUCCESS;
 	ch = &target->ch[ch_idx];
@@ -2995,16 +2998,12 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 static int srp_reset_device(struct scsi_cmnd *scmnd)
 {
 	struct srp_target_port *target = host_to_target(scmnd->device->host);
-	struct srp_request *req = (struct srp_request *) scmnd->host_scribble;
-	u16 ch_idx = srp_tag_ch(req->tag);
 	struct srp_rdma_ch *ch;
 	int i;
 
 	shost_printk(KERN_ERR, target->scsi_host, "SRP reset_device called\n");
 
-	if (WARN_ON_ONCE(ch_idx >= target->ch_count))
-		return SUCCESS;
-	ch = &target->ch[ch_idx];
+	ch = &target->ch[0];
 	if (srp_send_tsk_mgmt(ch, SRP_TAG_NO_REQ, scmnd->device->lun,
 			      SRP_TSK_LUN_RESET))
 		return FAILED;

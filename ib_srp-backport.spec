@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.25
+Version:	2.0.26
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,12 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Jul 10 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.26
+- Fix endianness of immediate data offset field.
+- Enable immediate data support by default.
+- Fix SCSI residual handling.
+- Fix a regression that got introduced via the multichannel code - avoid
+  that NULL host_scribble can result in a kernel crash.
 * Fri Jun 13 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.25
 - Added support for immediate data. This change improves write IOPS for
   small block sizes. This is a protocol change which is only enabled if

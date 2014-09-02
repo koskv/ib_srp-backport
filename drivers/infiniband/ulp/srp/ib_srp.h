@@ -77,6 +77,7 @@ enum {
 };
 
 enum srp_target_state {
+	SRP_TARGET_SCANNING,
 	SRP_TARGET_LIVE,
 	SRP_TARGET_REMOVED,
 };

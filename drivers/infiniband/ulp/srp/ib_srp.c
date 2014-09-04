@@ -713,6 +713,14 @@ static void srp_free_ch_ib(struct srp_rdma_ch *ch)
 	struct srp_device *dev = target->srp_host->srp_dev;
 	int i;
 
+	/*
+	 * Avoid that the SCSI error handler tries to use this channel after
+	 * it has been freed. The SCSI error handler can namely continue
+	 * trying to perform recovery actions after scsi_remove_host()
+	 * returned.
+	 */
+	ch->target = NULL;
+
 	if (target->using_rdma_cm) {
 		if (ch->rdma_cm.cm_id) {
 			rdma_destroy_id(ch->rdma_cm.cm_id);
@@ -1027,9 +1035,9 @@ static void srp_disconnect_target(struct srp_target_port *target)
 	}
 }
 
-static void srp_free_req_data(struct srp_rdma_ch *ch)
+static void srp_free_req_data(struct srp_target_port *target,
+			      struct srp_rdma_ch *ch)
 {
-	struct srp_target_port *target = ch->target;
 	struct srp_device *dev = target->srp_host->srp_dev;
 	struct ib_device *ibdev = dev->dev;
 	struct srp_request *req;
@@ -1151,7 +1159,7 @@ static void srp_remove_target(struct srp_target_port *target)
 	srp_rport_put(target->rport);
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
-		srp_free_req_data(ch);
+		srp_free_req_data(target, ch);
 	}
 	kfree(target->mq_map);
 	target->mq_map = NULL;
@@ -1428,6 +1436,8 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 	 */
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
+		if (!ch->target)
+			return -ENODEV;
 		ret += srp_new_cm_id(ch);
 	}
 	for (i = 0; i < target->ch_count; i++) {
@@ -3919,7 +3929,7 @@ static ssize_t srp_create_target(struct device *dev,
 					goto err_disconnect;
 				} else {
 					srp_free_ch_ib(ch);
-					srp_free_req_data(ch);
+					srp_free_req_data(target, ch);
 					target->mq_map[cpu] = 0;
 					target->ch_count = ch - target->ch;
 					break;
@@ -3975,7 +3985,7 @@ err_disconnect:
 		ch = &target->ch[i];
 		if (ch->target) {
 			srp_free_ch_ib(ch);
-			srp_free_req_data(ch);
+			srp_free_req_data(target, ch);
 		}
 	}
 

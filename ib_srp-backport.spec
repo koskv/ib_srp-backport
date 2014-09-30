@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.26
+Version:	2.0.27
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,13 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Tue Sep 30 2014 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.27
+- Avoid that invoking srp_reset_host() after scsi_remove_host() causes
+  trouble.
+- Avoid that I/O hangs due to a cable pull during LUN scanning. Note: so
+  far I have observed this hang only with multichannel support enabled
+  (ch_count > 1).
+- Fix a return value check in srp_init_module()
 * Thu Jul 10 2014 Bart Van Assche <bvanassche@fusionio.com> - 2.0.26
 - Fix endianness of immediate data offset field.
 - Enable immediate data support by default.

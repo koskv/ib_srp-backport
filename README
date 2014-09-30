@@ -4,8 +4,9 @@ ib_srp-backport README
 Introduction
 ------------
 
-This is a backport of the Linux kernel 3.16 InfiniBand SRP initiator with
-the following additional features:
+This is a backport of the Linux kernel 3.17 InfiniBand SRP initiator with
+the following additional features compared to the SRP initiator included in
+many Linux distributions:
 - Faster failover.
 - Configurable dev_loss_tmo, fast_io_fail_tmo and reconnect_delay parameters.
 - Support for initiator-side mirroring (by setting dev_loss_tmo to "off").
@@ -13,7 +14,7 @@ the following additional features:
 - Configurable queue size allowing higher performance against hard disk arrays.
 - Improved small block (IOPS) performance.
 - Support for lockless SCSI command dispatching on RHEL 6.2 and later.
-- Builds against any kernel in the range 2.6.32..3.15.
+- Builds against any kernel in the range 2.6.32..3.17.
 - RHEL 5.9, RHEL 6.x, SLES 11, Ubuntu 10.04 LTS, Ubuntu 12.04 LTS, OL 6.x,
   OL UEK 6.x CentOS 6.x and SL 6.x systems are supported.
 
@@ -43,6 +44,52 @@ find /lib/modules/$(uname -r) -name scsi_transport_srp.ko -o -name ib_srp.ko
 Please note that just like any other out-of-tree InfiniBand kernel driver,
 this kernel driver has to be rebuilt and reinstalled after every kernel
 update and after every OFED update.
+
+Performance Tuning
+------------------
+
+Getting the most out of the SRP initiator driver requires the following
+changes:
+* Increase the cmd_sg_entries and ch_count parameters, e.g. as follows:
+cat <<EOF >/etc/modprobe.d/ib_srp.conf
+options ib_srp cmd_sg_entries=255 ch_count=8
+EOF
+* Unload and reload the ib_srp kernel module.
+* Spread IB completion interrupts over CPU cores. An example for a system with
+  two dual-port ConnectX-3 HCA's, two CPU sockets and twelve cores per socket:
+  # scripts/spread-mlx4-ib-interrupts
+  IRQ  85 (mlx4-ib-1-0@PCI Bus 0000:0d): CPU  0 (node 0)
+  IRQ  86 (mlx4-ib-1-1@PCI Bus 0000:0d): CPU  2 (node 0)
+  IRQ  87 (mlx4-ib-1-2@PCI Bus 0000:0d): CPU  4 (node 0)
+  IRQ  88 (mlx4-ib-1-3@PCI Bus 0000:0d): CPU  6 (node 0)
+  IRQ  89 (mlx4-ib-1-4@PCI Bus 0000:0d): CPU  1 (node 1)
+  IRQ  90 (mlx4-ib-1-5@PCI Bus 0000:0d): CPU  3 (node 1)
+  IRQ  91 (mlx4-ib-1-6@PCI Bus 0000:0d): CPU  5 (node 1)
+  IRQ  92 (mlx4-ib-1-7@PCI Bus 0000:0d): CPU  7 (node 1)
+  IRQ  93 (mlx4-ib-2-0@PCI Bus 0000:0d): CPU  8 (node 0)
+  IRQ  94 (mlx4-ib-2-1@PCI Bus 0000:0d): CPU 10 (node 0)
+  IRQ  95 (mlx4-ib-2-2@PCI Bus 0000:0d): CPU 12 (node 0)
+  IRQ  96 (mlx4-ib-2-3@PCI Bus 0000:0d): CPU 14 (node 0)
+  IRQ  97 (mlx4-ib-2-4@PCI Bus 0000:0d): CPU  9 (node 1)
+  IRQ  98 (mlx4-ib-2-5@PCI Bus 0000:0d): CPU 11 (node 1)
+  IRQ  99 (mlx4-ib-2-6@PCI Bus 0000:0d): CPU 13 (node 1)
+  IRQ 100 (mlx4-ib-2-7@PCI Bus 0000:0d): CPU 15 (node 1)
+  IRQ 107 (mlx4-ib-1-0@PCI Bus 0000:21): CPU 16 (node 0)
+  IRQ 108 (mlx4-ib-1-1@PCI Bus 0000:21): CPU 18 (node 0)
+  IRQ 109 (mlx4-ib-1-2@PCI Bus 0000:21): CPU 20 (node 0)
+  IRQ 110 (mlx4-ib-1-3@PCI Bus 0000:21): CPU 22 (node 0)
+  IRQ 111 (mlx4-ib-1-4@PCI Bus 0000:21): CPU 17 (node 1)
+  IRQ 112 (mlx4-ib-1-5@PCI Bus 0000:21): CPU 19 (node 1)
+  IRQ 113 (mlx4-ib-1-6@PCI Bus 0000:21): CPU 21 (node 1)
+  IRQ 114 (mlx4-ib-1-7@PCI Bus 0000:21): CPU 23 (node 1)
+  IRQ 115 (mlx4-ib-2-0@PCI Bus 0000:21): CPU  0 (node 0)
+  IRQ 116 (mlx4-ib-2-1@PCI Bus 0000:21): CPU  2 (node 0)
+  IRQ 117 (mlx4-ib-2-2@PCI Bus 0000:21): CPU  4 (node 0)
+  IRQ 118 (mlx4-ib-2-3@PCI Bus 0000:21): CPU  6 (node 0)
+  IRQ 119 (mlx4-ib-2-4@PCI Bus 0000:21): CPU  1 (node 1)
+  IRQ 120 (mlx4-ib-2-5@PCI Bus 0000:21): CPU  3 (node 1)
+  IRQ 121 (mlx4-ib-2-6@PCI Bus 0000:21): CPU  5 (node 1)
+  IRQ 122 (mlx4-ib-2-7@PCI Bus 0000:21): CPU  7 (node 1)
 
 Uninstallation
 --------------
@@ -75,6 +122,7 @@ This version of ib_srp has been tested against the following kernels:
 2.6.32-42-server (Ubuntu 10.04.4 LTS + OFED 1.5.4.1)
 3.8.12 (kernel.org)
 3.10.7 (kernel.org)
+3.16.2 (kernel.org)
 
 If you are using another kernel or if you want to make sure that this version
 of the ib_srp driver has been built and installed correctly you can run

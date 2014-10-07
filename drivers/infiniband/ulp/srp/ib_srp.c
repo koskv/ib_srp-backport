@@ -3216,6 +3216,18 @@ static ssize_t show_local_ib_device(struct device *dev,
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+static ssize_t show_ch_count(struct class_device *dev, char *buf)
+#else
+static ssize_t show_ch_count(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+#endif
+{
+	struct srp_target_port *target = host_to_target(class_to_shost(dev));
+
+	return sprintf(buf, "%d\n", target->ch_count);
+}
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static ssize_t show_comp_vector(struct class_device *dev, char *buf)
 #else
 static ssize_t show_comp_vector(struct device *dev,
@@ -3275,6 +3287,7 @@ static CLASS_DEVICE_ATTR(req_lim,         S_IRUGO, show_req_lim,         NULL);
 static CLASS_DEVICE_ATTR(zero_req_lim,    S_IRUGO, show_zero_req_lim,	 NULL);
 static CLASS_DEVICE_ATTR(local_ib_port,   S_IRUGO, show_local_ib_port,   NULL);
 static CLASS_DEVICE_ATTR(local_ib_device, S_IRUGO, show_local_ib_device, NULL);
+static CLASS_DEVICE_ATTR(ch_count,        S_IRUGO, show_ch_count,     NULL);
 static CLASS_DEVICE_ATTR(comp_vector,     S_IRUGO, show_comp_vector,     NULL);
 static CLASS_DEVICE_ATTR(tl_retry_count,  S_IRUGO, show_tl_retry_count,  NULL);
 static CLASS_DEVICE_ATTR(cmd_sg_entries,  S_IRUGO, show_cmd_sg_entries,  NULL);
@@ -3291,6 +3304,7 @@ static DEVICE_ATTR(req_lim,         S_IRUGO, show_req_lim,         NULL);
 static DEVICE_ATTR(zero_req_lim,    S_IRUGO, show_zero_req_lim,	   NULL);
 static DEVICE_ATTR(local_ib_port,   S_IRUGO, show_local_ib_port,   NULL);
 static DEVICE_ATTR(local_ib_device, S_IRUGO, show_local_ib_device, NULL);
+static DEVICE_ATTR(ch_count,        S_IRUGO, show_ch_count,     NULL);
 static DEVICE_ATTR(comp_vector,     S_IRUGO, show_comp_vector,     NULL);
 static DEVICE_ATTR(tl_retry_count,  S_IRUGO, show_tl_retry_count,  NULL);
 static DEVICE_ATTR(cmd_sg_entries,  S_IRUGO, show_cmd_sg_entries,  NULL);
@@ -3310,6 +3324,7 @@ static struct class_device_attribute *srp_host_attrs[] = {
 	&class_device_attr_zero_req_lim,
 	&class_device_attr_local_ib_port,
 	&class_device_attr_local_ib_device,
+	&class_device_attr_ch_count,
 	&class_device_attr_comp_vector,
 	&class_device_attr_tl_retry_count,
 	&class_device_attr_cmd_sg_entries,
@@ -3329,6 +3344,7 @@ static struct device_attribute *srp_host_attrs[] = {
 	&dev_attr_zero_req_lim,
 	&dev_attr_local_ib_port,
 	&dev_attr_local_ib_device,
+	&dev_attr_ch_count,
 	&dev_attr_comp_vector,
 	&dev_attr_tl_retry_count,
 	&dev_attr_cmd_sg_entries,

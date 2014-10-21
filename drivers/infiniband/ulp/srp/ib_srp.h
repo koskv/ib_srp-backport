@@ -72,6 +72,8 @@ enum {
 	LOCAL_INV_WR_ID_MASK	= 1,
 	FAST_REG_WR_ID_MASK	= 2,
 
+	SRP_LAST_WR_ID          = 0xfffffffcU,
+
 	SRP_MAX_IMM_SGE		= 2,
 	SRP_IMM_DATA_OUT_OFFSET	= 80,
 };

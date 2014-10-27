@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.27
+Version:	2.0.28
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,12 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Oct 27 2014 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.28
+- Fix a race condition triggered by destroying a queue pair.
+- Increase default value of ch_count to a value above one.
+- Add ch_count sysfs attribute.
+- Allow newline separator for connection string.
+- Use MODULE_VERSION().
 * Tue Sep 30 2014 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.27
 - Avoid that invoking srp_reset_host() after scsi_remove_host() causes
   trouble.

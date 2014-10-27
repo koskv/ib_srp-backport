@@ -707,19 +707,14 @@ err:
  * Note: this function may be called without srp_alloc_iu_bufs() having been
  * invoked. Hence the ch->[rt]x_ring checks.
  */
-static void srp_free_ch_ib(struct srp_rdma_ch *ch)
+static void srp_free_ch_ib(struct srp_target_port *target,
+			   struct srp_rdma_ch *ch)
 {
-	struct srp_target_port *target = ch->target;
 	struct srp_device *dev = target->srp_host->srp_dev;
 	int i;
 
-	/*
-	 * Avoid that the SCSI error handler tries to use this channel after
-	 * it has been freed. The SCSI error handler can namely continue
-	 * trying to perform recovery actions after scsi_remove_host()
-	 * returned.
-	 */
-	ch->target = NULL;
+	if (!ch->target)
+		return;
 
 	if (target->using_rdma_cm) {
 		if (ch->rdma_cm.cm_id) {
@@ -733,6 +728,7 @@ static void srp_free_ch_ib(struct srp_rdma_ch *ch)
 		}
 	}
 
+	/* If srp_new_cm_id() succeeded but srp_create_ch_ib() not, return. */
 	if (!ch->qp)
 		return;
 
@@ -746,6 +742,14 @@ static void srp_free_ch_ib(struct srp_rdma_ch *ch)
 	ib_destroy_qp(ch->qp);
 	ib_destroy_cq(ch->send_cq);
 	ib_destroy_cq(ch->recv_cq);
+
+	/*
+	 * Avoid that the SCSI error handler tries to use this channel after
+	 * it has been freed. The SCSI error handler can namely continue
+	 * trying to perform recovery actions after scsi_remove_host()
+	 * returned.
+	 */
+	ch->target = NULL;
 
 	ch->qp = NULL;
 	ch->send_cq = ch->recv_cq = NULL;
@@ -1153,7 +1157,7 @@ static void srp_remove_target(struct srp_target_port *target)
 	srp_disconnect_target(target);
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
-		srp_free_ch_ib(ch);
+		srp_free_ch_ib(target, ch);
 	}
 	cancel_work_sync(&target->tl_err_work);
 	srp_rport_put(target->rport);
@@ -3944,7 +3948,7 @@ static ssize_t srp_create_target(struct device *dev,
 				if (node_idx == 0 && cpu_idx == 0) {
 					goto err_disconnect;
 				} else {
-					srp_free_ch_ib(ch);
+					srp_free_ch_ib(target, ch);
 					srp_free_req_data(target, ch);
 					target->mq_map[cpu] = 0;
 					target->ch_count = ch - target->ch;
@@ -4000,7 +4004,7 @@ err_disconnect:
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
 		if (ch->target) {
-			srp_free_ch_ib(ch);
+			srp_free_ch_ib(target, ch);
 			srp_free_req_data(target, ch);
 		}
 	}

@@ -183,7 +183,7 @@ static bool enable_imm_data = true;
 module_param(enable_imm_data, bool, 0644);
 #endif
 
-static unsigned ch_count = 1;
+static unsigned ch_count;
 module_param(ch_count, uint, 0444);
 
 static void srp_add_one(struct ib_device *device);
@@ -3933,8 +3933,10 @@ static ssize_t srp_create_target(struct device *dev,
 
 	ret = -ENOMEM;
 	target->ch_count = max_t(unsigned, num_online_nodes(),
-				 min(ch_count ? : UINT_MAX,
-				     (unsigned)num_online_cpus()));
+				 min(ch_count ? :
+				     min(4 * num_online_nodes(),
+					 ibdev->num_comp_vectors),
+				     num_online_cpus()));
 	target->ch = kcalloc(target->ch_count, sizeof(*target->ch),
 			     GFP_KERNEL);
 	if (!target->ch)

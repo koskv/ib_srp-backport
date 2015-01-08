@@ -2372,8 +2372,13 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	if (in_scsi_eh)
 		mutex_lock(&rport->mutex);
 
+	/*
+	 * The "blocked" state of SCSI devices is ignored by the SCSI core for
+	 * REQ_PREEMPT requests. Hence the explicit check below for the SCSI
+	 * device state.
+	 */
 	scmnd->result = srp_chkready(target->rport);
-	if (unlikely(scmnd->result)) {
+	if (unlikely(scmnd->result != 0 || scsi_device_blocked(scmnd->device))) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 		scmnd->request->cmd_flags |= REQ_QUIET;
 #else

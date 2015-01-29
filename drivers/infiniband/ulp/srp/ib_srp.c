@@ -77,13 +77,19 @@ MODULE_INFO(release_date, DRV_RELDATE);
 static unsigned int srp_sg_tablesize;
 static unsigned int cmd_sg_entries;
 static unsigned int indirect_sg_entries;
+#if defined(CONFIG_ORACLEASM_MODULE) && defined(CONFIG_INFINIBAND_SDP_MODULE)
+/* See also https://bugzilla.oracle.com/bugzilla/show_bug.cgi?id=14119 */
+#define DEF_PREFER_FR 1
+#else
+#define DEF_PREFER_FR 0
+#endif
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static int allow_ext_sg;
-static int prefer_fr;
+static int prefer_fr = DEF_PREFER_FR;
 static int register_always;
 #else
 static bool allow_ext_sg;
-static bool prefer_fr;
+static bool prefer_fr = DEF_PREFER_FR;
 static bool register_always;
 #endif
 static int topspin_workarounds = 1;

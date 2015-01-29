@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.28
+Version:	2.0.29
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,10 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Jan 29 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.29
+- IB/srp: Use fast registration (FR) by default on UEK.
+- Avoid that a SCSI rescan shortly after a cable pull sporadically triggers
+  a kernel oops.
 * Mon Oct 27 2014 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.28
 - Fix a race condition triggered by destroying a queue pair.
 - Increase default value of ch_count to a value above one.

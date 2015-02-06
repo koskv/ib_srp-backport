@@ -139,7 +139,7 @@ be installed on the SRP initiator system before the tests below can be run.
    scsi host8: ib_srp: new target: id_ext 0002c9030005f34e ioc_guid 0002c9030005f34e pkey ffff service_id 0002c9030005f34e dgid fe80:0000:0000:0000:0002:c903:0005:f34f
 
 2. Verify that the RESET task management function is processed properly.
-   # sg_reset -d ${srp_ini_dev}
+   # sg_reset -v -d ${srp_ini_dev}
    sg_reset: starting device reset
    sg_reset: completed device reset
 

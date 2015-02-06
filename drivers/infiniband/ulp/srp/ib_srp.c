@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#undef pr_fmt
 #define pr_fmt(fmt) PFX fmt
 #define DRV_NAME	"ib_srp"
 #define PFX		DRV_NAME ": "

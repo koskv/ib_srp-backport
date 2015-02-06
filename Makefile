@@ -26,7 +26,7 @@ OFED_KERNEL_IB_RPM:=$(shell for r in kernel-ib mlnx-ofa_kernel compat-rdma; do r
 # Name of the OFED kernel development RPM.
 OFED_KERNEL_IB_DEVEL_RPM:=$(shell for r in kernel-ib-devel mlnx-ofa_kernel-devel compat-rdma-devel; do rpm -q $$r 2>/dev/null | grep -q "^$$r" && echo $$r && break; done)
 
-OFED_FLAVOR=$(shell /usr/bin/ofed_info 2>/dev/null | head -n1 | sed -n 's/^MLNX_OFED.*/MOFED/p;s/^OFED-.*/OFED/p')
+OFED_FLAVOR=$(shell /usr/bin/ofed_info 2>/dev/null | head -n1 | sed -n 's/^\(MLNX_OFED\|OFED-internal\).*/MOFED/p;s/^OFED-.*/OFED/p')
 
 ifneq ($(OFED_KERNEL_IB_RPM),)
 ifeq ($(OFED_KERNEL_IB_RPM),compat-rdma)
@@ -34,18 +34,21 @@ ifeq ($(OFED_KERNEL_IB_RPM),compat-rdma)
 OFED_KERNEL_DIR:=/usr/src/compat-rdma
 OFED_CFLAGS:=-I$(OFED_KERNEL_DIR)/include
 else
-OFED_KERNEL_DIR:=/usr/src/ofa_kernel
 ifeq ($(OFED_FLAVOR),MOFED)
-# Mellanox OFED with or without kernel-ib RPM
-OFED_CFLAGS:=-I$(OFED_KERNEL_DIR)/include
+# Mellanox OFED with or without kernel-ib RPM. Since several MOFED backport
+# header files use the LINUX_BACKPORT() macro without including
+# <linux/compat-2.6.h>, include that header file explicitly.
+OFED_KERNEL_DIR:=/usr/src/ofa_kernel/default
+OFED_CFLAGS:=-I$(OFED_KERNEL_DIR)/include -include linux/compat-2.6.h
 else
 # OFED 1.5
+OFED_KERNEL_DIR:=/usr/src/ofa_kernel
 include $(OFED_KERNEL_DIR)/config.mk
 OFED_CFLAGS:=$(BACKPORT_INCLUDES) -I$(OFED_KERNEL_DIR)/include
 endif
 endif
 # Any OFED version
-OFED_MODULE_SYMVERS:=$(OFED_KERNEL_DIR)/Module.symvers
+OFED_MODULE_SYMVERS:=$(OFED_KERNEL_DIR)/$(MODULE_SYMVERS)
 endif
 
 INSTALL_MOD_DIR ?= extra
@@ -56,8 +59,8 @@ all: check
 		PRE_CFLAGS="$(OFED_CFLAGS)" modules
 	@m="$(shell pwd)/drivers/infiniband/ulp/srp/$(MODULE_SYMVERS)";	   \
 	cat <"$(KDIR)/$(MODULE_SYMVERS)" >"$$m";			   \
-	cat "$(shell pwd)/drivers/scsi/$(MODULE_SYMVERS)"		   \
-		$(OFED_MODULE_SYMVERS) |				   \
+	cat $(OFED_MODULE_SYMVERS)					   \
+		"$(shell pwd)/drivers/scsi/$(MODULE_SYMVERS)" |		   \
 	while read line; do						   \
 	    set -- $$line;						   \
 	    csum="$$1";							   \

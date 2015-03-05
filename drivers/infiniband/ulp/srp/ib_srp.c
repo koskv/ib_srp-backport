@@ -607,14 +607,13 @@ static struct srp_fr_pool *srp_alloc_fr_pool(struct srp_target_port *target)
  */
 static void srp_destroy_qp(struct srp_rdma_ch *ch)
 {
-	struct srp_target_port *target = ch->target;
 	static struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
 	static struct ib_recv_wr wr = { .wr_id = SRP_LAST_WR_ID };
 	struct ib_recv_wr *bad_wr;
 	int ret;
 
 	/* Destroying a QP and reusing ch->done is only safe if not connected */
-	WARN_ON_ONCE(target->connected);
+	WARN_ON_ONCE(ch->connected);
 
 	ret = ib_modify_qp(ch->qp, &attr, IB_QP_STATE);
 	WARN_ONCE(ret, "ib_cm_init_qp_attr() returned %d\n", ret);
@@ -1066,6 +1065,7 @@ static void srp_disconnect_target(struct srp_target_port *target)
 
 		for (i = 0; i < target->ch_count; i++) {
 			ch = &target->ch[i];
+			ch->connected = false;
 			ret = 0;
 			if (target->using_rdma_cm) {
 				if (ch->rdma_cm.cm_id)
@@ -1275,6 +1275,7 @@ static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
 		switch (ch->status) {
 		case 0:
 			srp_change_conn_state(target, true);
+			ch->connected = true;
 			return 0;
 
 		case SRP_PORT_REDIRECT:
@@ -2757,7 +2758,7 @@ static int srp_ib_cm_handler(struct ib_cm_id *cm_id, struct ib_cm_event *event)
 	case IB_CM_DREQ_RECEIVED:
 		shost_printk(KERN_WARNING, target->scsi_host,
 			     PFX "DREQ received - connection closed\n");
-		srp_change_conn_state(target, false);
+		ch->connected = false;
 		if (ib_send_cm_drep(cm_id, NULL, 0))
 			shost_printk(KERN_ERR, target->scsi_host,
 				     PFX "Sending CM DREP failed\n");

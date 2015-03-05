@@ -72,7 +72,7 @@
 MODULE_AUTHOR("Roland Dreier");
 MODULE_DESCRIPTION("InfiniBand SCSI RDMA Protocol initiator");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION(DRV_VERSION);
+MODULE_VERSION(DRV_VERSION "#" __stringify(OFED_FLAVOR));
 MODULE_INFO(release_date, DRV_RELDATE);
 
 static unsigned int srp_sg_tablesize;

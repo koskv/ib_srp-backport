@@ -1,3 +1,4 @@
+LINUXINCLUDE := $(PRE_CFLAGS) $(LINUXINCLUDE)
 ccflags-y += -DDRV_VERSION="\"$$(sed -n -e 's/^Version:[[:blank:]]*\([^[:blank:]]*\).*/\1/p' $(KBUILD_EXTMOD)/../../../../ib_srp-backport.spec)\""
 ccflags-y += -DDRV_RELDATE="\"$$(sed -n -e '/^%changelog/,/^-/ s/^\*[[:blank:]]*[^[:blank:]]*[[:blank:]]*\([^[:blank:]]*[[:blank:]]*[^[:blank:]]*[[:blank:]]*[^[:blank:]]*\).*/\1/p' $(KBUILD_EXTMOD)/../../../../ib_srp-backport.spec)\""
 

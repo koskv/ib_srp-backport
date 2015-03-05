@@ -21,12 +21,12 @@ MODULE_SYMVERS:=$(shell if [ -e $(KDIR)/Module.symvers ]; then \
 		       echo Module.symvers; else echo Modules.symvers; fi)
 
 # Name of the OFED kernel RPM.
-OFED_KERNEL_IB_RPM:=$(shell for r in kernel-ib mlnx-ofa_kernel compat-rdma; do rpm -q $$r 2>/dev/null | grep -q "^$$r" && echo $$r && break; done)
+OFED_KERNEL_IB_RPM:=$(shell for r in mlnx-ofa_kernel compat-rdma kernel-ib; do rpm -q $$r 2>/dev/null | grep -q "^$$r" && echo $$r && break; done)
 
 # Name of the OFED kernel development RPM.
-OFED_KERNEL_IB_DEVEL_RPM:=$(shell for r in kernel-ib-devel mlnx-ofa_kernel-devel compat-rdma-devel; do rpm -q $$r 2>/dev/null | grep -q "^$$r" && echo $$r && break; done)
+OFED_KERNEL_IB_DEVEL_RPM:=$(shell for r in mlnx-ofa_kernel-devel compat-rdma-devel kernel-ib-devel; do rpm -q $$r 2>/dev/null | grep -q "^$$r" && echo $$r && break; done)
 
-OFED_FLAVOR=$(shell /usr/bin/ofed_info 2>/dev/null | head -n1 | sed -n 's/^\(MLNX_OFED\|OFED-internal\).*/MOFED/p;s/^OFED-.*/OFED/p')
+OFED_FLAVOR=$(shell if [ -e /usr/bin/ofed_info ]; then /usr/bin/ofed_info 2>/dev/null | head -n1 | sed -n 's/^\(MLNX_OFED\|OFED-internal\).*/MOFED/p;s/^OFED-.*/OFED/p'; else echo in-tree; fi)
 
 ifneq ($(OFED_KERNEL_IB_RPM),)
 ifeq ($(OFED_KERNEL_IB_RPM),compat-rdma)
@@ -52,11 +52,12 @@ OFED_MODULE_SYMVERS:=$(OFED_KERNEL_DIR)/$(MODULE_SYMVERS)
 endif
 
 INSTALL_MOD_DIR ?= extra
+PRE_CFLAGS=$(OFED_CFLAGS) -DOFED_FLAVOR=$(OFED_FLAVOR)
 
 all: check
 	CONFIG_SCSI_SRP_ATTRS=m						   \
 		$(MAKE) -C $(KDIR) M=$(shell pwd)/drivers/scsi		   \
-		PRE_CFLAGS="$(OFED_CFLAGS)" modules
+		PRE_CFLAGS="$(PRE_CFLAGS)" modules
 	@m="$(shell pwd)/drivers/infiniband/ulp/srp/$(MODULE_SYMVERS)";	   \
 	cat <"$(KDIR)/$(MODULE_SYMVERS)" >"$$m";			   \
 	cat $(OFED_MODULE_SYMVERS)					   \
@@ -72,7 +73,7 @@ all: check
 	done
 	CONFIG_SCSI_SRP_ATTRS=m CONFIG_SCSI_SRP=m CONFIG_INFINIBAND_SRP=m  \
 	$(MAKE) -C $(KDIR) M=$(shell pwd)/drivers/infiniband/ulp/srp	   \
-	    PRE_CFLAGS="$(OFED_CFLAGS)" modules
+	    PRE_CFLAGS="$(PRE_CFLAGS)" modules
 
 install: all
 	for m in drivers/scsi/scsi_transport_srp.ko			   \
@@ -106,13 +107,6 @@ check:
 	  elif [ -e /lib/modules/$(KVER)/updates/drivers/infiniband/ulp/srp/ib_srp.ko ]; then \
 	    echo "Error: the OFED SRP initiator must be removed first"      \
 	         "(/lib/modules/$(KVER)/updates/drivers/infiniband/ulp/srp/ib_srp.ko).";    \
-	    false;                                                          \
-	  elif [ -e $(KDIR)/scripts/Makefile.lib ]                          \
-	       && ! grep -wq '^c_flags .*PRE_CFLAGS'                        \
-	          $(KDIR)/scripts/Makefile.lib                              \
-	       && ! grep -wq '^LINUXINCLUDE .*PRE_CFLAGS'                   \
-	          $(KDIR)/Makefile; then                                    \
-	    echo "Error: the kernel build system has not yet been patched.";\
 	    false;                                                          \
 	  else                                                              \
 	    echo "  Building against $(OFED_FLAVOR) $(OFED_KERNEL_IB_RPM)"  \

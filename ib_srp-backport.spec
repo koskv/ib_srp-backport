@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.29
+Version:	2.0.30
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,11 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Mar 05 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.30
+- IB/srp: Suppress a false positive warning by srp_destroy_qp().
+- IB/srp: Simplify building against (M)OFED kernel headers.
+- IB/srp: Embed OFED flavor name in ib_srp kernel module version string.
+- IB/srp: Fix build against SLES 11 + (M)OFED.
 * Thu Jan 29 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.29
 - IB/srp: Use fast registration (FR) by default on UEK.
 - Avoid that a SCSI rescan shortly after a cable pull sporadically triggers

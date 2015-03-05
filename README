@@ -4,7 +4,7 @@ ib_srp-backport README
 Introduction
 ------------
 
-This is a backport of the Linux kernel 3.17 InfiniBand SRP initiator with
+This is a backport of the Linux kernel 3.18 InfiniBand SRP initiator with
 the following additional features compared to the SRP initiator included in
 many Linux distributions:
 - Faster failover.
@@ -17,6 +17,7 @@ many Linux distributions:
 - Builds against any kernel in the range 2.6.32..3.17.
 - RHEL 5.9, RHEL 6.x, SLES 11, Ubuntu 10.04 LTS, Ubuntu 12.04 LTS, OL 6.x,
   OL UEK 6.x CentOS 6.x and SL 6.x systems are supported.
+- Support for multiple communication channels between initiator and target.
 
 Installation
 ------------
@@ -28,11 +29,6 @@ built and installed as follows on an RPM-based distribution:
 type yum    >/dev/null 2>&1 && yum install kernel-devel make gcc rpm-build
 type zypper >/dev/null 2>&1 && zypper install kernel-default-devel make gcc rpm
 type dpkg   >/dev/null 2>&1 && apt-get install "$(dpkg-query -S /boot/vmlinuz-$(uname -r) | sed 's/^linux-image/linux-headers/;s/:.*//')" make gcc rpm
-# When using OFED, edit the kernel Makefile with sed as follows:
-sed -i.orig \
-    -e 's/^\(LINUXINCLUDE[[:blank:]]\+:=[[:blank:]]\+\)/\1$(PRE_CFLAGS) /' \
-    /lib/modules/$(uname -r)/build/Makefile
-diff -u /lib/modules/$(uname -r)/build/Makefile{.orig,}
 make rpm
 if type dpkg >/dev/null 2>&1; then
   rpm --nodeps -U rpmbuilddir/RPMS/*/*.rpm
@@ -123,6 +119,7 @@ This version of ib_srp has been tested against the following kernels:
 3.8.12 (kernel.org)
 3.10.7 (kernel.org)
 3.16.2 (kernel.org)
+3.18.6 (kernel.org)
 
 If you are using another kernel or if you want to make sure that this version
 of the ib_srp driver has been built and installed correctly you can run
@@ -216,6 +213,7 @@ Performance Data
 
 Initiator: Quad-core Intel i5-2400 @ 3.10 GHz
 Target: Core2Duo E8400 @ 3.00 GHz
+ib_srp-backport version: v2.0.24
 Single LUN; RAM disk as target (brd kernel module); single FDR IB link;
 NOOP scheduler; block layer rq_affinity = 2; ib_srp cmd_sg_entries=255;
 runlevel 3; dynamic C-state and P-state transitions disabled.

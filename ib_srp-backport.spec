@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.30
+Version:	2.0.31
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,8 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Apr 02 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.31
+- IB/srp: Fixed a sporadic crash during login on NUMA systems.
 * Thu Mar 05 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.30
 - IB/srp: Suppress a false positive warning by srp_destroy_qp().
 - IB/srp: Simplify building against (M)OFED kernel headers.

@@ -3956,7 +3956,7 @@ static ssize_t srp_create_target(struct device *dev,
 	if (!target->ch)
 		goto err;
 
-	target->mq_map = kcalloc(num_possible_cpus(), sizeof(*target->mq_map),
+	target->mq_map = kcalloc(nr_cpu_ids, sizeof(*target->mq_map),
 				 GFP_KERNEL);
 	if (!target->mq_map)
 		goto err_free_ch;

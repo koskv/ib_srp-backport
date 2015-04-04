@@ -3876,6 +3876,7 @@ static ssize_t srp_create_target(struct device *dev,
 	struct srp_device *srp_dev = host->srp_dev;
 	struct ib_device *ibdev = srp_dev->dev;
 	int ret, node_idx, node, cpu, i;
+	int first_cpu = -1;
 	bool multich = false;
 
 	target_host = scsi_host_alloc(&srp_template,
@@ -3976,6 +3977,8 @@ static ssize_t srp_create_target(struct device *dev,
 		for_each_online_cpu(cpu) {
 			if (cpu_to_node(cpu) != node)
 				continue;
+			if (first_cpu < 0)
+				first_cpu = cpu;
 			target->mq_map[cpu] = ch_start == ch_end ? ch_start :
 				ch_start + cpu_idx % (ch_end - ch_start);
 			if (ch_start + cpu_idx >= ch_end)
@@ -4009,7 +4012,7 @@ static ssize_t srp_create_target(struct device *dev,
 				} else {
 					srp_free_ch_ib(target, ch);
 					srp_free_req_data(target, ch);
-					target->mq_map[cpu] = 0;
+					target->mq_map[cpu] = first_cpu;
 					target->ch_count = ch - target->ch;
 					break;
 				}
@@ -4020,6 +4023,11 @@ static ssize_t srp_create_target(struct device *dev,
 		}
 		node_idx++;
 	}
+
+	if (first_cpu != 0)
+		for_each_possible_cpu(cpu)
+			if (target->mq_map[cpu] == 0)
+				target->mq_map[cpu] = first_cpu;
 
 	ret = srp_add_target(host, target);
 	if (ret)

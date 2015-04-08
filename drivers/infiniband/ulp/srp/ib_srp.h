@@ -155,7 +155,9 @@ struct srp_request {
 	uint32_t		tag;
 };
 
-/*
+/**
+ * struct srp_rdma_ch
+ * @comp_vector: Completion vector used by this RDMA channel.
  * @max_it_iu_len: Maximum initiator-to-target information unit length as
  *    granted by the SRP target.
  */
@@ -210,7 +212,10 @@ struct srp_rdma_ch {
 	bool			connected;
 };
 
-/*
+/**
+ * struct srp_target_port
+ * @comp_vector: Completion vector used by the first RDMA channel created for
+ *   this target port.
  * @max_iu_len: Requested maximum information unit length.
  */
 struct srp_target_port {

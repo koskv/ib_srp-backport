@@ -2141,7 +2141,7 @@ static void srp_process_cred_req(struct srp_rdma_ch *ch,
 	};
 	s32 delta = be32_to_cpu(req->req_lim_delta);
 
-	if (srp_response_common(ch, delta, &rsp, sizeof rsp))
+	if (srp_response_common(ch, delta, &rsp, sizeof(rsp)))
 		shost_printk(KERN_ERR, ch->target->scsi_host, PFX
 			     "problems processing SRP_CRED_REQ\n");
 }
@@ -2159,7 +2159,7 @@ static void srp_process_aer_req(struct srp_rdma_ch *ch,
 	shost_printk(KERN_ERR, target->scsi_host, PFX
 		     "ignoring AER for LUN %llu\n", be64_to_cpu(req->lun));
 
-	if (srp_response_common(ch, delta, &rsp, sizeof rsp))
+	if (srp_response_common(ch, delta, &rsp, sizeof(rsp)))
 		shost_printk(KERN_ERR, target->scsi_host, PFX
 			     "problems processing SRP_AER_REQ\n");
 }
@@ -3022,7 +3022,7 @@ static int srp_send_tsk_mgmt(struct srp_rdma_ch *ch, u64 req_tag,
 
 	ib_dma_sync_single_for_device(dev, iu->dma, sizeof *tsk_mgmt,
 				      DMA_TO_DEVICE);
-	if (srp_post_send(ch, iu, sizeof *tsk_mgmt)) {
+	if (srp_post_send(ch, iu, sizeof(*tsk_mgmt))) {
 		srp_put_tx_iu(ch, iu, SRP_IU_TSK_MGMT);
 		mutex_unlock(&rport->mutex);
 

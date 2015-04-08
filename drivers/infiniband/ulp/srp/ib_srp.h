@@ -256,7 +256,7 @@ struct srp_target_port {
 	union {
 		struct {
 			__be64			service_id;
-			__be16			orig_dgid[8];
+			union ib_gid		orig_dgid;
 			__be16			pkey;
 		} ib_cm;
 		struct {

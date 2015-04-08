@@ -374,7 +374,7 @@ static int srp_new_ib_cm_id(struct srp_rdma_ch *ch)
 		ib_destroy_cm_id(ch->ib_cm.cm_id);
 	ch->ib_cm.cm_id = new_cm_id;
 	ch->ib_cm.path.sgid = target->sgid;
-	memcpy(ch->ib_cm.path.dgid.raw, target->ib_cm.orig_dgid, 16);
+	ch->ib_cm.path.dgid = target->ib_cm.orig_dgid;
 	ch->ib_cm.path.pkey = target->ib_cm.pkey;
 	ch->ib_cm.path.service_id = target->ib_cm.service_id;
 
@@ -2713,7 +2713,7 @@ static void srp_ib_cm_rej_handler(struct ib_cm_id *cm_id,
 				shost_printk(KERN_WARNING, shost, PFX
 					     "SRP LOGIN from %pI6 to %pI6 REJECTED, reason 0x%08x\n",
 					     target->sgid.raw,
-					     target->ib_cm.orig_dgid, reason);
+					     target->ib_cm.orig_dgid.raw, reason);
 		} else
 			shost_printk(KERN_WARNING, shost,
 				     "  REJ reason: IB_CM_REJ_CONSUMER_DEFINED,"
@@ -3221,7 +3221,7 @@ static ssize_t show_orig_dgid(struct device *dev,
 
 	if (target->using_rdma_cm)
 		return -ENOENT;
-	return sprintf(buf, "%pI6\n", target->ib_cm.orig_dgid);
+	return sprintf(buf, "%pI6\n", target->ib_cm.orig_dgid.raw);
 }
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
@@ -3695,9 +3695,13 @@ static int srp_parse_options(const char *buf, struct srp_target_port *target)
 			}
 
 			for (i = 0; i < 16; ++i) {
-				strlcpy(dgid, p + i * 2, 3);
-				((char *)target->ib_cm.orig_dgid)[i] =
-					simple_strtoul(dgid, NULL, 16);
+				strlcpy(dgid, p + i * 2, sizeof(dgid));
+				if (sscanf(dgid, "%hhx",
+					   &target->ib_cm.orig_dgid.raw[i]) < 1) {
+					ret = -EINVAL;
+					kfree(p);
+					goto out;
+				}
 			}
 			kfree(p);
 			break;
@@ -4055,7 +4059,7 @@ static ssize_t srp_create_target(struct device *dev,
 				     be64_to_cpu(target->ioc_guid),
 				     be16_to_cpu(target->ib_cm.pkey),
 				     be64_to_cpu(target->ib_cm.service_id),
-				     target->sgid.raw, target->ib_cm.orig_dgid);
+				     target->sgid.raw, target->ib_cm.orig_dgid.raw);
 		}
 	}
 

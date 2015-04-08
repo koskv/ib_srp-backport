@@ -31,9 +31,7 @@
  */
 
 #undef pr_fmt
-#define pr_fmt(fmt) PFX fmt
-#define DRV_NAME	"ib_srp"
-#define PFX		DRV_NAME ": "
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "../../../../include/linux/backport.h"
 #include <linux/module.h>
@@ -62,6 +60,8 @@
 
 #include "ib_srp.h"
 
+#define DRV_NAME	"ib_srp"
+#define PFX		DRV_NAME ": "
 #ifndef DRV_VERSION
 #define DRV_VERSION	"1.0"
 #endif

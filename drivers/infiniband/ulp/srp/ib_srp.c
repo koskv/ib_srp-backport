@@ -3981,9 +3981,11 @@ static ssize_t srp_create_target(struct device *dev,
 		const int ch_end = ((node_idx + 1) * target->ch_count /
 				    num_online_nodes());
 		const int cv_start = (node_idx * ibdev->num_comp_vectors /
-				      num_online_nodes());
+				      num_online_nodes() + target->comp_vector)
+				     % ibdev->num_comp_vectors;
 		const int cv_end = ((node_idx + 1) * ibdev->num_comp_vectors /
-				    num_online_nodes());
+				    num_online_nodes() + target->comp_vector)
+				   % ibdev->num_comp_vectors;
 		int cpu_idx = 0;
 
 		for_each_online_cpu(cpu) {

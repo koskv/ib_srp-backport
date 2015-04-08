@@ -67,8 +67,6 @@ struct srp_internal {
 	struct transport_container rport_attr_cont;
 };
 
-static void srp_wait_for_queuecommand(struct Scsi_Host *shost);
-
 #define to_srp_internal(tmpl) container_of(tmpl, struct srp_internal, t)
 
 #define	dev_to_rport(d)	container_of(d, struct srp_rport, dev)
@@ -519,6 +517,40 @@ static void srp_reconnect_work(struct work_struct *work)
 	}
 }
 
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
+/**
+ * scsi_request_fn_active() - number of kernel threads inside scsi_request_fn()
+ * @shost: SCSI host for which to count the number of scsi_request_fn() callers.
+ */
+static int scsi_request_fn_active(struct Scsi_Host *shost)
+{
+	struct scsi_device *sdev;
+	struct request_queue *q;
+	int request_fn_active = 0;
+
+	shost_for_each_device(sdev, shost) {
+		q = sdev->request_queue;
+
+		spin_lock_irq(q->queue_lock);
+		request_fn_active += q->request_fn_active;
+		spin_unlock_irq(q->queue_lock);
+	}
+
+	return request_fn_active;
+}
+#endif
+
+/* Wait until ongoing shost->hostt->queuecommand() calls have finished. */
+static void srp_wait_for_queuecommand(struct Scsi_Host *shost)
+{
+#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
+	while (scsi_request_fn_active(shost))
+		msleep(20);
+#else
+	msleep(200);
+#endif
+}
+
 static void __rport_fail_io_fast(struct srp_rport *rport)
 {
 	struct Scsi_Host *shost = rport_to_shost(rport);
@@ -639,40 +671,6 @@ void srp_start_tl_fail_timers(struct srp_rport *rport)
 	mutex_unlock(&rport->mutex);
 }
 EXPORT_SYMBOL(srp_start_tl_fail_timers);
-
-#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
-/**
- * scsi_request_fn_active() - number of kernel threads inside scsi_request_fn()
- * @shost: SCSI host for which to count the number of scsi_request_fn() callers.
- */
-static int scsi_request_fn_active(struct Scsi_Host *shost)
-{
-	struct scsi_device *sdev;
-	struct request_queue *q;
-	int request_fn_active = 0;
-
-	shost_for_each_device(sdev, shost) {
-		q = sdev->request_queue;
-
-		spin_lock_irq(q->queue_lock);
-		request_fn_active += q->request_fn_active;
-		spin_unlock_irq(q->queue_lock);
-	}
-
-	return request_fn_active;
-}
-#endif
-
-/* Wait until ongoing shost->hostt->queuecommand() calls have finished. */
-static void srp_wait_for_queuecommand(struct Scsi_Host *shost)
-{
-#ifdef HAVE_REQUEST_QUEUE_REQUEST_FN_ACTIVE
-	while (scsi_request_fn_active(shost))
-		msleep(20);
-#else
-	msleep(200);
-#endif
-}
 
 /**
  * srp_reconnect_rport() - reconnect to an SRP target port

@@ -169,8 +169,8 @@ struct srp_rdma_ch {
 	s32			req_lim;
 
 	/* These are read-only in the hot path */
-	struct srp_target_port *target;
-	struct ib_cq	       *send_cq ____cacheline_aligned_in_smp;
+	struct srp_target_port *target ____cacheline_aligned_in_smp;
+	struct ib_cq	       *send_cq;
 	struct ib_cq	       *recv_cq;
 	struct ib_qp	       *qp;
 	union {

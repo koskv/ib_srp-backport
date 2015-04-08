@@ -68,8 +68,6 @@ struct srp_internal {
 };
 
 static void srp_wait_for_queuecommand(struct Scsi_Host *shost);
-static void __rport_fail_io_fast(struct srp_rport *rport);
-static void __srp_start_tl_fail_timers(struct srp_rport *rport);
 
 #define to_srp_internal(tmpl) container_of(tmpl, struct srp_internal, t)
 

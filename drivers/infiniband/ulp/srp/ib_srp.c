@@ -1245,7 +1245,7 @@ static void srp_rport_delete(struct srp_rport *rport)
 	srp_queue_remove_work(target);
 }
 
-static int srp_connect_target(struct srp_rdma_ch *ch, bool multich)
+static int srp_connect_ch(struct srp_rdma_ch *ch, bool multich)
 {
 	struct srp_target_port *target = ch->target;
 	int ret;
@@ -1520,7 +1520,7 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 				ret = 0;
 			break;
 		}
-		ret = srp_connect_target(ch, multich);
+		ret = srp_connect_ch(ch, multich);
 		multich = true;
 	}
 
@@ -4005,7 +4005,7 @@ static ssize_t srp_create_target(struct device *dev,
 			if (ret)
 				goto err_disconnect;
 
-			ret = srp_connect_target(ch, multich);
+			ret = srp_connect_ch(ch, multich);
 			if (ret) {
 				shost_printk(KERN_ERR, target->scsi_host,
 					     PFX "Connection %d/%d failed\n",

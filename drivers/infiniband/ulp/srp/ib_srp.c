@@ -327,9 +327,9 @@ static void srp_qp_event(struct ib_event *event, void *context)
 	pr_debug("QP event %d\n", event->event);
 }
 
-static int srp_init_ib_qp(struct srp_rdma_ch *ch, struct ib_qp *qp)
+static int srp_init_ib_qp(struct srp_target_port *target,
+			  struct ib_qp *qp)
 {
-	struct srp_target_port *target = ch->target;
 	struct ib_qp_attr *attr;
 	int ret;
 
@@ -680,7 +680,7 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 	} else {
 		qp = ib_create_qp(dev->pd, init_attr);
 		if (!IS_ERR(qp)) {
-			ret = srp_init_ib_qp(ch, qp);
+			ret = srp_init_ib_qp(target, qp);
 			if (ret)
 				ib_destroy_qp(qp);
 		} else {

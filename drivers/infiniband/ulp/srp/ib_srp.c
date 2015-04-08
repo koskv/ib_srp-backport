@@ -371,7 +371,6 @@ static int srp_new_ib_cm_id(struct srp_rdma_ch *ch)
 	if (ch->ib_cm.cm_id)
 		ib_destroy_cm_id(ch->ib_cm.cm_id);
 	ch->ib_cm.cm_id = new_cm_id;
-
 	ch->ib_cm.path.sgid = target->sgid;
 	memcpy(ch->ib_cm.path.dgid.raw, target->ib_cm.orig_dgid, 16);
 	ch->ib_cm.path.pkey = target->ib_cm.pkey;
@@ -1449,8 +1448,10 @@ static void srp_terminate_io(struct srp_rport *rport)
 
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
+
 		for (j = 0; j < target->req_ring_size; ++j) {
 			struct srp_request *req = &ch->req_ring[j];
+
 			srp_finish_req(ch, req, NULL,
 				       DID_TRANSPORT_FAILFAST << 16);
 		}
@@ -1493,6 +1494,7 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 		ch = &target->ch[i];
 		for (j = 0; j < target->req_ring_size; ++j) {
 			struct srp_request *req = &ch->req_ring[j];
+
 			srp_finish_req(ch, req, NULL, DID_RESET << 16);
 		}
 	}

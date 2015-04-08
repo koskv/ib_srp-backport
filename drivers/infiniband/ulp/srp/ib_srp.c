@@ -193,6 +193,8 @@ module_param(enable_imm_data, bool, 0644);
 
 static unsigned ch_count;
 module_param(ch_count, uint, 0444);
+MODULE_PARM_DESC(ch_count,
+		 "Number of RDMA channels to use for communication with an SRP target. Using more than one channel improves performance if the HCA supports multiple completion vectors. The default value is the minimum of four times the number of online CPU sockets and the number of completion vectors supported by the HCA.");
 
 static void srp_add_one(struct ib_device *device);
 static void srp_remove_one(struct ib_device *device);

@@ -2064,7 +2064,7 @@ static void srp_process_rsp(struct srp_rdma_ch *ch, struct srp_rsp *rsp)
 		}
 		if (!scmnd) {
 			shost_printk(KERN_ERR, target->scsi_host,
-				     "Null scmnd for RSP w/tag %#016llx received on ch %ld / QP %#x\n",
+				     "Null scmnd for RSP w/tag %#016llx received on ch %td / QP %#x\n",
 				     rsp->tag, ch - target->ch, ch->qp->qp_num);
 
 			spin_lock_irqsave(&ch->lock, flags);

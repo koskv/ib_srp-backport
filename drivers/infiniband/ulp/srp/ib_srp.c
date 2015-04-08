@@ -3909,11 +3909,17 @@ static ssize_t srp_create_target(struct device *dev,
 	target->tl_retry_count	= 2;
 	target->queue_size	= SRP_DEFAULT_QUEUE_SIZE;
 
+	/*
+	 * Avoid that the SCSI host can be removed by srp_remove_target()
+	 * before this function returns.
+	 */
+	scsi_host_get(target->scsi_host);
+
 	mutex_lock(&host->add_target_mutex);
 
 	ret = srp_parse_options(buf, target);
 	if (ret)
-		goto err;
+		goto out;
 
 	target->req_ring_size = target->queue_size - SRP_TSK_MGMT_SQ_SIZE;
 
@@ -3924,7 +3930,7 @@ static ssize_t srp_create_target(struct device *dev,
 			     be64_to_cpu(target->ioc_guid),
 			     be64_to_cpu(target->initiator_ext));
 		ret = -EEXIST;
-		goto err;
+		goto out;
 	}
 
 	if (!srp_dev->has_fmr && !srp_dev->has_fr && !target->allow_ext_sg &&
@@ -3950,7 +3956,7 @@ static ssize_t srp_create_target(struct device *dev,
 	spin_lock_init(&target->lock);
 	ret = ib_query_gid(ibdev, host->port, 0, &target->sgid);
 	if (ret)
-		goto err;
+		goto out;
 
 	ret = -ENOMEM;
 	target->ch_count = max_t(unsigned, num_online_nodes(),
@@ -3961,7 +3967,7 @@ static ssize_t srp_create_target(struct device *dev,
 	target->ch = kcalloc(target->ch_count, sizeof(*target->ch),
 			     GFP_KERNEL);
 	if (!target->ch)
-		goto err;
+		goto out;
 
 	target->mq_map = kcalloc(nr_cpu_ids, sizeof(*target->mq_map),
 				 GFP_KERNEL);
@@ -4039,9 +4045,6 @@ static ssize_t srp_create_target(struct device *dev,
 	if (ret)
 		goto err_disconnect;
 
-	/* Protects against concurrent srp_remove_target() invocation */
-	scsi_host_get(target->scsi_host);
-
 	if (target->state != SRP_TARGET_REMOVED) {
 		if (target->using_rdma_cm) {
 			char dst[64];
@@ -4063,12 +4066,13 @@ static ssize_t srp_create_target(struct device *dev,
 		}
 	}
 
-	scsi_host_put(target->scsi_host);
-
 	ret = count;
 
 out:
 	mutex_unlock(&host->add_target_mutex);
+
+	scsi_host_put(target->scsi_host);
+
 	return ret;
 
 err_disconnect:
@@ -4086,9 +4090,6 @@ err_disconnect:
 
 err_free_ch:
 	kfree(target->ch);
-
-err:
-	scsi_host_put(target_host);
 	goto out;
 }
 

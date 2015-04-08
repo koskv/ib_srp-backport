@@ -166,10 +166,7 @@ static inline void scsi_target_unblock_compat(struct device *dev,
 #define scsi_target_unblock scsi_target_unblock_compat
 
 /* <scsi/scsi_host.h> */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33) || \
-	(defined(RHEL_MAJOR) && RHEL_MAJOR -0 >= 6)
-#define HAVE_SCSI_QDEPTH_REASON
-#else
+#ifndef HAVE_SCSI_QDEPTH_REASON
 /*
  * See also commit e881a172 (modify change_queue_depth to take in reason why it
  * is being called).

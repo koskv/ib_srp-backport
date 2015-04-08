@@ -89,6 +89,7 @@ enum srp_iu_type {
 	SRP_IU_RSP,
 };
 
+#ifndef HAVE_USE_BLK_TAGS
 static inline u32 build_srp_tag(u16 ch, u16 req_idx)
 {
 	return ch << 16 | req_idx;
@@ -103,6 +104,7 @@ static inline u16 srp_tag_idx(u32 tag)
 {
 	return tag & ((1 << 16) - 1);
 }
+#endif
 
 /*
  * @mr_page_mask: HCA memory registration page mask.
@@ -140,7 +142,9 @@ struct srp_host {
 };
 
 struct srp_request {
+#ifndef HAVE_USE_BLK_TAGS
 	struct list_head	list;
+#endif
 	struct scsi_cmnd       *scmnd;
 	struct srp_iu	       *cmd;
 	union {
@@ -151,7 +155,9 @@ struct srp_request {
 	struct srp_direct_buf  *indirect_desc;
 	dma_addr_t		indirect_dma_addr;
 	short			nmdesc;
+#ifndef HAVE_USE_BLK_TAGS
 	uint32_t		tag;
+#endif
 };
 
 /**
@@ -163,7 +169,9 @@ struct srp_request {
 struct srp_rdma_ch {
 	/* These are RW in the hot path, and commonly used together */
 	struct list_head	free_tx;
+#ifndef HAVE_USE_BLK_TAGS
 	struct list_head	free_reqs;
+#endif
 	spinlock_t		lock;
 	s32			req_lim;
 
@@ -223,7 +231,9 @@ struct srp_target_port {
 
 	/* read only in the hot path */
 	struct srp_rdma_ch	*ch;
+#ifndef HAVE_USE_BLK_TAGS
 	int			*mq_map;
+#endif
 	u32			ch_count;
 	u32			lkey;
 	u32			rkey;

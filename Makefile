@@ -53,7 +53,11 @@ endif
 
 INSTALL_MOD_DIR ?= extra
 HAVE_IB_INC_RKEY = $(shell $(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd)/conftest/ib_inc_rkey PRE_CFLAGS="$(OFED_CFLAGS)" >/dev/null 2>&1 && echo -DHAVE_IB_INC_RKEY)
-PRE_CFLAGS=$(OFED_CFLAGS) $(HAVE_IB_INC_RKEY) -DOFED_FLAVOR=$(OFED_FLAVOR)
+HAVE_SCSI_QDEPTH_REASON = $(shell $(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd)/conftest/scsi_qdepth_reason PRE_CFLAGS="-Werror $(OFED_CFLAGS)" >/dev/null 2>&1 && echo -DHAVE_SCSI_QDEPTH_REASON)
+HAVE_TRACK_QUEUE_DEPTH = $(shell $(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd)/conftest/track_queue_depth PRE_CFLAGS="$(OFED_CFLAGS)" >/dev/null 2>&1 && echo -DHAVE_TRACK_QUEUE_DEPTH)
+HAVE_USE_BLK_TAGS = $(shell $(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd)/conftest/use_blk_tags PRE_CFLAGS="$(OFED_CFLAGS)" >/dev/null 2>&1 && echo -DHAVE_USE_BLK_TAGS)
+PRE_CFLAGS = $(OFED_CFLAGS) $(HAVE_IB_INC_RKEY) $(HAVE_SCSI_QDEPTH_REASON) \
+ $(HAVE_TRACK_QUEUE_DEPTH) $(HAVE_USE_BLK_TAGS) -DOFED_FLAVOR=$(OFED_FLAVOR)
 
 all: check
 	@m="$(shell pwd)/drivers/scsi/$(MODULE_SYMVERS)";	   	   \

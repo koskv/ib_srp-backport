@@ -1124,7 +1124,9 @@ static int srp_alloc_req_data(struct srp_rdma_ch *ch)
 	dma_addr_t dma_addr;
 	int i, ret = -ENOMEM;
 
+#ifndef HAVE_USE_BLK_TAGS
 	INIT_LIST_HEAD(&ch->free_reqs);
+#endif
 
 	ch->req_ring = kcalloc(target->req_ring_size, sizeof(*ch->req_ring),
 			       GFP_KERNEL);
@@ -1156,8 +1158,10 @@ static int srp_alloc_req_data(struct srp_rdma_ch *ch)
 			goto out;
 
 		req->indirect_dma_addr = dma_addr;
+#ifndef HAVE_USE_BLK_TAGS
 		req->tag = build_srp_tag(ch - target->ch, i);
 		list_add_tail(&req->list, &ch->free_reqs);
+#endif
 	}
 	ret = 0;
 
@@ -1210,8 +1214,10 @@ static void srp_remove_target(struct srp_target_port *target)
 		ch = &target->ch[i];
 		srp_free_req_data(target, ch);
 	}
+#ifndef HAVE_USE_BLK_TAGS
 	kfree(target->mq_map);
 	target->mq_map = NULL;
+#endif
 	kfree(target->ch);
 	target->ch = NULL;
 
@@ -1404,7 +1410,9 @@ static void srp_free_req(struct srp_rdma_ch *ch, struct srp_request *req,
 
 	spin_lock_irqsave(&ch->lock, flags);
 	ch->req_lim += req_lim_delta;
+#ifndef HAVE_USE_BLK_TAGS
 	list_add_tail(&req->list, &ch->free_reqs);
+#endif
 	spin_unlock_irqrestore(&ch->lock, flags);
 }
 
@@ -2035,7 +2043,9 @@ static void srp_process_rsp(struct srp_rdma_ch *ch, struct srp_rsp *rsp)
 	struct srp_request *req;
 	struct scsi_cmnd *scmnd;
 	unsigned long flags;
+#ifndef HAVE_USE_BLK_TAGS
 	unsigned i;
+#endif
 
 	if (unlikely(rsp->tag & SRP_TAG_TSK_MGMT)) {
 		spin_lock_irqsave(&ch->lock, flags);
@@ -2047,6 +2057,13 @@ static void srp_process_rsp(struct srp_rdma_ch *ch, struct srp_rsp *rsp)
 			ch->tsk_mgmt_status = rsp->data[3];
 		complete(&ch->tsk_mgmt_done);
 	} else {
+#ifdef HAVE_USE_BLK_TAGS
+		scmnd = scsi_host_find_tag(target->scsi_host, rsp->tag);
+		if (scmnd) {
+			req = (void *)scmnd->host_scribble;
+			scmnd = srp_claim_req(ch, req, NULL, scmnd);
+		}
+#else
 		if (srp_tag_ch(rsp->tag) != ch - target->ch)
 			pr_err("Channel idx mismatch: tag %#llx <> ch %#lx\n",
 			       rsp->tag, ch - target->ch);
@@ -2057,6 +2074,7 @@ static void srp_process_rsp(struct srp_rdma_ch *ch, struct srp_rsp *rsp)
 		} else {
 			scmnd = NULL;
 		}
+#endif
 		if (!scmnd) {
 			shost_printk(KERN_ERR, target->scsi_host,
 				     "Null scmnd for RSP w/tag %#016llx received on ch %td / QP %#x\n",
@@ -2310,10 +2328,12 @@ static void srp_send_completion(struct ib_cq *cq, void *ch_ptr)
 	}
 }
 
+#ifndef HAVE_USE_BLK_TAGS
 static struct srp_rdma_ch *srp_map_cpu_to_ch(struct srp_target_port *target)
 {
 	return &target->ch[target->mq_map[raw_smp_processor_id()]];
 }
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
 /*
@@ -2368,6 +2388,10 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	struct srp_cmd *cmd;
 	struct ib_device *dev;
 	unsigned long flags;
+	u32 tag;
+#ifdef HAVE_USE_BLK_TAGS
+	u16 idx;
+#endif
 	int len, ret;
 	const bool in_scsi_eh = !in_interrupt() && current == shost->ehandler;
 
@@ -2395,15 +2419,30 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 		goto err;
 	}
 
+#ifdef HAVE_USE_BLK_TAGS
+	WARN_ON_ONCE(scmnd->request->tag < 0);
+	tag = blk_mq_unique_tag(scmnd->request);
+	ch = &target->ch[blk_mq_unique_tag_to_hwq(tag)];
+	idx = blk_mq_unique_tag_to_tag(tag);
+	WARN_ONCE(idx >= target->req_ring_size, "%s: tag %#x: idx %d >= %d\n",
+		  dev_name(&shost->shost_gendev), tag, idx,
+		  target->req_ring_size);
+#else
 	ch = srp_map_cpu_to_ch(target);
+#endif
 
 	spin_lock_irqsave(&ch->lock, flags);
 	iu = __srp_get_tx_iu(ch, SRP_IU_CMD);
 	if (!iu)
 		goto err_unlock;
 
+#ifdef HAVE_USE_BLK_TAGS
+	req = &ch->req_ring[idx];
+#else
 	req = list_first_entry(&ch->free_reqs, struct srp_request, list);
 	list_del(&req->list);
+	tag = req->tag;
+#endif
 	spin_unlock_irqrestore(&ch->lock, flags);
 
 	dev = target->srp_host->srp_dev->dev;
@@ -2417,7 +2456,7 @@ static int SRP_QUEUECOMMAND(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 
 	cmd->opcode = SRP_CMD;
 	int_to_scsilun(scmnd->device->lun, &cmd->lun);
-	cmd->tag    = req->tag;
+	cmd->tag    = tag;
 	memcpy(cmd->cdb, scmnd->cmnd, scmnd->cmd_len);
 
 	req->scmnd    = scmnd;
@@ -2467,7 +2506,9 @@ err_iu:
 	req->scmnd = NULL;
 
 	spin_lock_irqsave(&ch->lock, flags);
+#ifndef HAVE_USE_BLK_TAGS
 	list_add(&req->list, &ch->free_reqs);
+#endif
 
 err_unlock:
 	spin_unlock_irqrestore(&ch->lock, flags);
@@ -2919,6 +2960,7 @@ static int srp_rdma_cm_handler(struct rdma_cm_id *cm_id,
 	return 0;
 }
 
+#ifndef HAVE_TRACK_QUEUE_DEPTH
 /**
  * srp_change_queue_type - changing device queue tag type
  * @sdev: scsi device struct
@@ -2940,6 +2982,7 @@ srp_change_queue_type(struct scsi_device *sdev, int tag_type)
 
 	return tag_type;
 }
+#endif
 
 /**
  * srp_change_queue_depth - setting device queue depth
@@ -2957,8 +3000,15 @@ srp_change_queue_depth(struct scsi_device *sdev, int qdepth, int reason)
 #else
 srp_change_queue_depth(struct scsi_device *sdev, int qdepth)
 {
+#ifndef HAVE_TRACK_QUEUE_DEPTH
 	const int reason = SCSI_QDEPTH_DEFAULT;
 #endif
+#endif
+#ifdef HAVE_TRACK_QUEUE_DEPTH
+	if (!sdev->tagged_supported)
+		qdepth = 1;
+	return scsi_change_queue_depth(sdev, qdepth);
+#else
 	struct Scsi_Host *shost = sdev->host;
 	int max_depth;
 	if (reason == SCSI_QDEPTH_DEFAULT || reason == SCSI_QDEPTH_RAMP_UP) {
@@ -2974,6 +3024,7 @@ srp_change_queue_depth(struct scsi_device *sdev, int qdepth)
 		return -EOPNOTSUPP;
 
 	return sdev->queue_depth;
+#endif
 }
 
 static int srp_send_tsk_mgmt(struct srp_rdma_ch *ch, u64 req_tag, u64 lun,
@@ -3039,6 +3090,7 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 {
 	struct srp_target_port *target = host_to_target(scmnd->device->host);
 	struct srp_request *req = (struct srp_request *) scmnd->host_scribble;
+	u32 tag;
 	u16 ch_idx;
 	struct srp_rdma_ch *ch;
 	int ret;
@@ -3047,15 +3099,21 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 
 	if (!req)
 		return SUCCESS;
-	ch_idx = srp_tag_ch(req->tag);
+#ifdef HAVE_USE_BLK_TAGS
+	tag = blk_mq_unique_tag(scmnd->request);
+	ch_idx = blk_mq_unique_tag_to_hwq(tag);
+#else
+	tag = req->tag;
+	ch_idx = srp_tag_ch(tag);
+#endif
 	if (WARN_ON_ONCE(ch_idx >= target->ch_count))
 		return SUCCESS;
 	ch = &target->ch[ch_idx];
 	if (!srp_claim_req(ch, req, NULL, scmnd))
 		return SUCCESS;
 	shost_printk(KERN_ERR, target->scsi_host,
-		     "Sending SRP abort for tag %#x\n", req->tag);
-	if (srp_send_tsk_mgmt(ch, req->tag, scmnd->device->lun,
+		     "Sending SRP abort for tag %#x\n", tag);
+	if (srp_send_tsk_mgmt(ch, tag, scmnd->device->lun,
 			      SRP_TSK_ABORT_TASK) == 0)
 		ret = SUCCESS;
 	else if (target->rport->state == SRP_RPORT_LOST)
@@ -3093,6 +3151,7 @@ static int srp_reset_device(struct scsi_cmnd *scmnd)
 		ch = &target->ch[i];
 		for (i = 0; i < target->req_ring_size; ++i) {
 			struct srp_request *req = &ch->req_ring[i];
+
 			srp_finish_req(ch, req, scmnd->device, DID_RESET << 16);
 		}
 	}
@@ -3423,7 +3482,9 @@ static struct scsi_host_template srp_template = {
 #endif
 	.queuecommand			= srp_queuecommand,
 	.change_queue_depth             = srp_change_queue_depth,
+#ifndef HAVE_TRACK_QUEUE_DEPTH
 	.change_queue_type              = srp_change_queue_type,
+#endif
 	.eh_abort_handler		= srp_abort,
 	.eh_device_reset_handler	= srp_reset_device,
 	.eh_host_reset_handler		= srp_reset_host,
@@ -3433,7 +3494,13 @@ static struct scsi_host_template srp_template = {
 	.this_id			= -1,
 	.cmd_per_lun			= SRP_DEFAULT_CMD_SQ_SIZE,
 	.use_clustering			= ENABLE_CLUSTERING,
-	.shost_attrs			= srp_host_attrs
+	.shost_attrs			= srp_host_attrs,
+#ifdef HAVE_USE_BLK_TAGS
+	.use_blk_tags			= 1,
+#endif
+#ifdef HAVE_TRACK_QUEUE_DEPTH
+	.track_queue_depth		= 1,
+#endif
 };
 
 static int srp_sdev_count(struct Scsi_Host *host)
@@ -3878,7 +3945,9 @@ static ssize_t srp_create_target(struct device *dev,
 	struct srp_device *srp_dev = host->srp_dev;
 	struct ib_device *ibdev = srp_dev->dev;
 	int ret, node_idx, node, cpu, i;
+#ifndef HAVE_USE_BLK_TAGS
 	int first_cpu = -1;
+#endif
 	bool multich = false;
 
 	target_host = scsi_host_alloc(&srp_template,
@@ -3916,6 +3985,12 @@ static ssize_t srp_create_target(struct device *dev,
 	ret = srp_parse_options(buf, target);
 	if (ret)
 		goto out;
+
+#ifdef HAVE_USE_BLK_TAGS
+	ret = scsi_init_shared_tag_map(target_host, target_host->can_queue);
+	if (ret)
+		goto out;
+#endif
 
 	target->req_ring_size = target->queue_size - SRP_TSK_MGMT_SQ_SIZE;
 
@@ -3965,10 +4040,12 @@ static ssize_t srp_create_target(struct device *dev,
 	if (!target->ch)
 		goto out;
 
+#ifndef HAVE_USE_BLK_TAGS
 	target->mq_map = kcalloc(nr_cpu_ids, sizeof(*target->mq_map),
 				 GFP_KERNEL);
 	if (!target->mq_map)
 		goto err_free_ch;
+#endif
 
 	node_idx = 0;
 	for_each_online_node(node) {
@@ -3987,10 +4064,12 @@ static ssize_t srp_create_target(struct device *dev,
 		for_each_online_cpu(cpu) {
 			if (cpu_to_node(cpu) != node)
 				continue;
+#ifndef HAVE_USE_BLK_TAGS
 			if (first_cpu < 0)
 				first_cpu = cpu;
 			target->mq_map[cpu] = ch_start == ch_end ? ch_start :
 				ch_start + cpu_idx % (ch_end - ch_start);
+#endif
 			if (ch_start + cpu_idx >= ch_end)
 				continue;
 			ch = &target->ch[ch_start + cpu_idx];
@@ -4022,7 +4101,9 @@ static ssize_t srp_create_target(struct device *dev,
 				} else {
 					srp_free_ch_ib(target, ch);
 					srp_free_req_data(target, ch);
+#ifndef HAVE_USE_BLK_TAGS
 					target->mq_map[cpu] = first_cpu;
+#endif
 					target->ch_count = ch - target->ch;
 					break;
 				}
@@ -4034,10 +4115,14 @@ static ssize_t srp_create_target(struct device *dev,
 		node_idx++;
 	}
 
+#ifdef HAVE_USE_BLK_TAGS
+	target->scsi_host->nr_hw_queues = target->ch_count;
+#else
 	if (first_cpu != 0)
 		for_each_possible_cpu(cpu)
 			if (target->mq_map[cpu] == 0)
 				target->mq_map[cpu] = first_cpu;
+#endif
 
 	ret = srp_add_target(host, target);
 	if (ret)
@@ -4084,9 +4169,11 @@ err_disconnect:
 		}
 	}
 
+#ifndef HAVE_USE_BLK_TAGS
 	kfree(target->mq_map);
 
 err_free_ch:
+#endif
 	kfree(target->ch);
 	goto out;
 }

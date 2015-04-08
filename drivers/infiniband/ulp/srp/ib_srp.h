@@ -72,7 +72,7 @@ enum {
 	LOCAL_INV_WR_ID_MASK	= 1,
 	FAST_REG_WR_ID_MASK	= 2,
 
-	SRP_LAST_WR_ID          = 0xfffffffcU,
+	SRP_LAST_WR_ID		= 0xfffffffcU,
 
 	SRP_MAX_IMM_SGE		= 2,
 	SRP_IMM_DATA_OUT_OFFSET	= 80,
@@ -197,13 +197,13 @@ struct srp_rdma_ch {
 		} rdma_cm;
 	};
 
-	struct srp_iu	       **tx_ring;
-	struct srp_iu	       **rx_ring;
-	struct srp_request	*req_ring;
-	int			 max_ti_iu_len;
-	unsigned int		 max_it_iu_len;
-	u16			 buf_fmt;
-	int			 comp_vector;
+	struct srp_iu	      **tx_ring;
+	struct srp_iu	      **rx_ring;
+	struct srp_request     *req_ring;
+	int			max_ti_iu_len;
+	unsigned int		max_it_iu_len;
+	u16			buf_fmt;
+	int			comp_vector;
 
 	struct completion	tsk_mgmt_done;
 	u8			tsk_mgmt_status;

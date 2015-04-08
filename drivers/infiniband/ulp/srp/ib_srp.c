@@ -1488,8 +1488,6 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 	 */
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
-		if (!ch->target)
-			return -ENODEV;
 		ret += srp_new_cm_id(ch);
 	}
 	for (i = 0; i < target->ch_count; i++) {
@@ -1515,11 +1513,8 @@ static int srp_rport_reconnect(struct srp_rport *rport)
 	}
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
-		if (ret) {
-			if (i > 1)
-				ret = 0;
+		if (ret)
 			break;
-		}
 		ret = srp_connect_ch(ch, multich);
 		multich = true;
 	}

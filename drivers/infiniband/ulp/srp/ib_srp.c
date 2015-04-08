@@ -1126,7 +1126,7 @@ static int srp_alloc_req_data(struct srp_rdma_ch *ch)
 
 	INIT_LIST_HEAD(&ch->free_reqs);
 
-	ch->req_ring = kzalloc(target->req_ring_size * sizeof(*ch->req_ring),
+	ch->req_ring = kcalloc(target->req_ring_size, sizeof(*ch->req_ring),
 			       GFP_KERNEL);
 	if (!ch->req_ring)
 		goto out;
@@ -2497,11 +2497,11 @@ static int srp_alloc_iu_bufs(struct srp_rdma_ch *ch)
 	struct srp_target_port *target = ch->target;
 	int i;
 
-	ch->rx_ring = kzalloc(target->queue_size * sizeof(*ch->rx_ring),
+	ch->rx_ring = kcalloc(target->queue_size, sizeof(*ch->rx_ring),
 			      GFP_KERNEL);
 	if (!ch->rx_ring)
 		goto err_no_ring;
-	ch->tx_ring = kzalloc(target->queue_size * sizeof(*ch->tx_ring),
+	ch->tx_ring = kcalloc(target->queue_size, sizeof(*ch->tx_ring),
 			      GFP_KERNEL);
 	if (!ch->tx_ring)
 		goto err_no_ring;

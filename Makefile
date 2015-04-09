@@ -56,6 +56,18 @@ HAVE_IB_INC_RKEY = $(shell $(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd)/conftest/ib_i
 PRE_CFLAGS=$(OFED_CFLAGS) $(HAVE_IB_INC_RKEY) -DOFED_FLAVOR=$(OFED_FLAVOR)
 
 all: check
+	@m="$(shell pwd)/drivers/scsi/$(MODULE_SYMVERS)";	   	   \
+	cat <"$(KDIR)/$(MODULE_SYMVERS)" >"$$m";			   \
+	cat /dev/null $(OFED_MODULE_SYMVERS) |				   \
+	while read line; do						   \
+	    set -- $$line;						   \
+	    csum="$$1";							   \
+	    sym="$$2";							   \
+	    if ! grep -q "^$$csum[[:blank:]]*$$sym[[:blank:]]" "$$m"; then \
+		sed -i.tmp -e "/^[\w]*[[:blank:]]*$$sym[[:blank:]]/d" "$$m"; \
+		echo "$$line" >>"$$m";					   \
+	    fi								   \
+	done
 	CONFIG_SCSI_SRP_ATTRS=m						   \
 		$(MAKE) -C $(KDIR) M=$(shell pwd)/drivers/scsi		   \
 		PRE_CFLAGS="$(PRE_CFLAGS)" modules

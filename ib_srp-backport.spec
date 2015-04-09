@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.31
+Version:	2.0.32
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -23,7 +23,7 @@ Requires:	/sbin/depmod /usr/bin/find %{kernel_rpm}
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-build-%(%{__id_u} -n)
 
 %description
-Backport of the Linux IB/SRP 3.16 kernel module to earlier kernel versions.
+Backport of the Linux IB/SRP 4.0 kernel module to earlier kernel versions.
 
 %prep
 rm -rf $RPM_BUILD_ROOT
@@ -69,6 +69,29 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Thu Apr 09 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.32
+- IB/srp: Port to Linux kernel 3.18/3.19/4.0.
+- IB/srp: Cache subnet timeout.
+- IB/srp: Improve the reconnect code.
+- IB/srp: Convert three kzalloc() calls into kcalloc() calls.
+- IB/srp: Add 64-bit LUN support.
+- IB/srp: Restore target->comp_vector.
+- IB/srp: Avoid SCSI host removal before scsi_create_target() returns.
+- IB/srp: Change orig_dgid data type into ib_gid.
+- IB/srp: Fix a printk format specifier.
+- IB/srp: Align read-only variables properly.
+- IB/srp: Change type of first argument of srp_init_ib_qp().
+- IB/srp: Remove superfluous casts.
+- IB/srp: Rename srp_connect_target() into srp_connect_ch().
+- IB/srp: Add description for ch_count kernel module parameter.
+- IB/srp: Rework pr_fmt() definition.
+- IB/srp: Fix coding style.
+- IB/srp: Add two comments.
+- IB/srp: Adjust blank lines.
+- IB/srp: Convert between spaces and tabs.
+- scsi_transport_srp: Reduce failover time.
+- scsi_transport_srp: Move two function definitions.
+- scsi_transport_srp: Remove two superfluous forward declarations.
 * Thu Apr 02 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.31
 - IB/srp: Fixed a sporadic crash during login on NUMA systems.
 * Thu Mar 05 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.30

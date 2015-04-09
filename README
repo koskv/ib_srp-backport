@@ -4,7 +4,7 @@ ib_srp-backport README
 Introduction
 ------------
 
-This is a backport of the Linux kernel 3.18 InfiniBand SRP initiator with
+This is a backport of the Linux kernel 4.0 InfiniBand SRP initiator with
 the following additional features compared to the SRP initiator included in
 many Linux distributions:
 - Faster failover.
@@ -14,7 +14,7 @@ many Linux distributions:
 - Configurable queue size allowing higher performance against hard disk arrays.
 - Improved small block (IOPS) performance.
 - Support for lockless SCSI command dispatching on RHEL 6.2 and later.
-- Builds against any kernel in the range 2.6.32..3.17.
+- Builds against any kernel in the range 2.6.32..4.0.
 - RHEL 5.9, RHEL 6.x, SLES 11, Ubuntu 10.04 LTS, Ubuntu 12.04 LTS, OL 6.x,
   OL UEK 6.x CentOS 6.x and SL 6.x systems are supported.
 - Support for multiple communication channels between initiator and target.

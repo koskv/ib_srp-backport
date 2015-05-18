@@ -277,7 +277,6 @@ struct srp_target_port {
 	};
 
 	u32			rq_tmo_jiffies;
-	bool			connected;
 
 	int			zero_req_lim;
 

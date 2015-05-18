@@ -1041,45 +1041,28 @@ static bool srp_queue_remove_work(struct srp_target_port *target)
 	return changed;
 }
 
-static bool srp_change_conn_state(struct srp_target_port *target,
-				  bool connected)
-{
-	bool changed = false;
-
-	spin_lock_irq(&target->lock);
-	if (target->connected != connected) {
-		target->connected = connected;
-		changed = true;
-	}
-	spin_unlock_irq(&target->lock);
-
-	return changed;
-}
-
 static void srp_disconnect_target(struct srp_target_port *target)
 {
 	struct srp_rdma_ch *ch;
 	int i, ret;
 
-	if (srp_change_conn_state(target, false)) {
-		/* XXX should send SRP_I_LOGOUT request */
+	/* XXX should send SRP_I_LOGOUT request */
 
-		for (i = 0; i < target->ch_count; i++) {
-			ch = &target->ch[i];
-			ch->connected = false;
-			ret = 0;
-			if (target->using_rdma_cm) {
-				if (ch->rdma_cm.cm_id)
-					rdma_disconnect(ch->rdma_cm.cm_id);
-			} else {
-				if (ch->ib_cm.cm_id)
-					ret = ib_send_cm_dreq(ch->ib_cm.cm_id,
-							      NULL, 0);
-			}
-			if (ret < 0) {
-				shost_printk(KERN_DEBUG, target->scsi_host,
-					     PFX "Sending CM DREQ failed\n");
-			}
+	for (i = 0; i < target->ch_count; i++) {
+		ch = &target->ch[i];
+		ch->connected = false;
+		ret = 0;
+		if (target->using_rdma_cm) {
+			if (ch->rdma_cm.cm_id)
+				rdma_disconnect(ch->rdma_cm.cm_id);
+		} else {
+			if (ch->ib_cm.cm_id)
+				ret = ib_send_cm_dreq(ch->ib_cm.cm_id,
+						      NULL, 0);
+		}
+		if (ret < 0) {
+			shost_printk(KERN_DEBUG, target->scsi_host,
+				     PFX "Sending CM DREQ failed\n");
 		}
 	}
 }
@@ -1251,12 +1234,26 @@ static void srp_rport_delete(struct srp_rport *rport)
 	srp_queue_remove_work(target);
 }
 
+/**
+ * srp_connected_ch() - number of connected channels
+ * @target: SRP target port.
+ */
+static int srp_connected_ch(struct srp_target_port *target)
+{
+	int i, c = 0;
+
+	for (i = 0; i < target->ch_count; i++)
+		c += target->ch[i].connected;
+
+	return c;
+}
+
 static int srp_connect_ch(struct srp_rdma_ch *ch, bool multich)
 {
 	struct srp_target_port *target = ch->target;
 	int ret;
 
-	WARN_ON_ONCE(!multich && target->connected);
+	WARN_ON_ONCE(!multich && srp_connected_ch(target) > 0);
 
 	ret = srp_lookup_path(ch);
 	if (ret)
@@ -1279,7 +1276,6 @@ static int srp_connect_ch(struct srp_rdma_ch *ch, bool multich)
 		 */
 		switch (ch->status) {
 		case 0:
-			srp_change_conn_state(target, true);
 			ch->connected = true;
 			return 0;
 
@@ -2267,7 +2263,7 @@ static void srp_handle_qp_err(u64 wr_id, enum ib_wc_status wc_status,
 		return;
 	}
 
-	if (target->connected && !target->qp_in_error) {
+	if (ch->connected && !target->qp_in_error) {
 		if (wr_id & LOCAL_INV_WR_ID_MASK) {
 			shost_printk(KERN_ERR, target->scsi_host, PFX
 				     "LOCAL_INV failed with status %d\n",
@@ -2931,7 +2927,7 @@ static int srp_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		break;
 
 	case RDMA_CM_EVENT_DISCONNECTED:
-		if (target->connected) {
+		if (ch->connected) {
 			shost_printk(KERN_WARNING, target->scsi_host,
 				     PFX "received DREQ\n");
 			rdma_disconnect(ch->rdma_cm.cm_id);
@@ -3037,7 +3033,7 @@ static int srp_send_tsk_mgmt(struct srp_rdma_ch *ch, u64 req_tag, u64 lun,
 	struct srp_iu *iu;
 	struct srp_tsk_mgmt *tsk_mgmt;
 
-	if (!target->connected || target->qp_in_error)
+	if (!ch->connected || target->qp_in_error)
 		return -1;
 
 	init_completion(&ch->tsk_mgmt_done);
@@ -3546,7 +3542,8 @@ static int srp_add_target(struct srp_host *host, struct srp_target_port *target)
 	scsi_scan_target(&target->scsi_host->shost_gendev,
 			 0, target->scsi_id, SCAN_WILD_CARD, 0);
 
-	if (!target->connected || target->qp_in_error) {
+	if (srp_connected_ch(target) < target->ch_count ||
+	    target->qp_in_error) {
 		shost_printk(KERN_INFO, target->scsi_host,
 			     PFX "SCSI scan failed - removing SCSI host\n");
 		srp_queue_remove_work(target);

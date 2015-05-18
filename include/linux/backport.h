@@ -113,6 +113,21 @@ static inline u32 ib_inc_rkey(u32 rkey)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
+/* See also commit 2b1b5b60 */
+static inline const char *__attribute_const__
+ib_event_msg(enum ib_event_type event)
+{
+	return "(?)";
+}
+
+static inline const char *__attribute_const__
+ib_wc_status_msg(enum ib_wc_status status)
+{
+	return "(?)";
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
 /* See also commit bcf4c1ea */
 struct ib_cq_init_attr {
 	unsigned int	cqe;

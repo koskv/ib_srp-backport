@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.32
+Version:	2.0.33
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -69,6 +69,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Wed Jun 24 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.33
+- rpmbuild: Suppress an rpmbuild warning.
+- Makefile: Leave out a superfluous regular expression.
 * Thu Apr 09 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.32
 - IB/srp: Port to Linux kernel 3.18/3.19/4.0.
 - IB/srp: Cache subnet timeout.

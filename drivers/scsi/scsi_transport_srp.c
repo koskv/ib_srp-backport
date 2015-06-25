@@ -264,7 +264,7 @@ static ssize_t srp_show_tmo(char *buf, int tmo)
 	return tmo >= 0 ? sprintf(buf, "%d\n", tmo) : sprintf(buf, "off\n");
 }
 
-static int srp_parse_tmo(int *tmo, const char *buf)
+int srp_parse_tmo(int *tmo, const char *buf)
 {
 	int res = 0;
 
@@ -275,6 +275,7 @@ static int srp_parse_tmo(int *tmo, const char *buf)
 
 	return res;
 }
+EXPORT_SYMBOL(srp_parse_tmo);
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 static ssize_t show_reconnect_delay(struct class_device *dev, char *buf)

@@ -145,7 +145,8 @@ dist-gzip:
 	  tar -T- -cf- |				\
 	  tar -C ib_srp-backport-$(VERSION) -xf-; } &&	\
 	rm -f ib_srp-backport-$(VERSION).tar.bz2 &&	\
-	tar -cjf ib_srp-backport-$(VERSION).tar.bz2	\
+	tar --owner=root --group=root			\
+	    -cjf ib_srp-backport-$(VERSION).tar.bz2	\
 		ib_srp-backport-$(VERSION) &&		\
 	rm -rf ib_srp-backport-$(VERSION)
 

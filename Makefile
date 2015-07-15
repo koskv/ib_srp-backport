@@ -68,7 +68,7 @@ all: check
 	    csum="$$1";							   \
 	    sym="$$2";							   \
 	    if ! grep -q "^$$csum[[:blank:]]*$$sym[[:blank:]]" "$$m"; then \
-		sed -i.tmp -e "/^[\w]*[[:blank:]]*$$sym[[:blank:]]/d" "$$m"; \
+		sed -i.tmp -e "/^[[:blank:]]*$$sym[[:blank:]]/d" "$$m"; \
 		echo "$$line" >>"$$m";					   \
 	    fi								   \
 	done
@@ -84,7 +84,7 @@ all: check
 	    csum="$$1";							   \
 	    sym="$$2";							   \
 	    if ! grep -q "^$$csum[[:blank:]]*$$sym[[:blank:]]" "$$m"; then \
-		sed -i.tmp -e "/^[\w]*[[:blank:]]*$$sym[[:blank:]]/d" "$$m"; \
+		sed -i.tmp -e "/^[[:blank:]]*$$sym[[:blank:]]/d" "$$m"; \
 		echo "$$line" >>"$$m";					   \
 	    fi								   \
 	done

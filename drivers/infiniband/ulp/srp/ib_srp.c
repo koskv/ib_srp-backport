@@ -135,7 +135,7 @@ MODULE_PARM_DESC(register_always,
 		 "Use memory registration even for contiguous memory regions");
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
-static struct kernel_param_ops srp_tmo_ops;
+static const struct kernel_param_ops srp_tmo_ops;
 #else
 static int srp_tmo_get(char *buffer, const struct kernel_param *kp);
 static int srp_tmo_set(const char *val, const struct kernel_param *kp);
@@ -253,7 +253,7 @@ out:
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
-static struct kernel_param_ops srp_tmo_ops = {
+static const struct kernel_param_ops srp_tmo_ops = {
 	.get = srp_tmo_get,
 	.set = srp_tmo_set,
 };

@@ -112,6 +112,26 @@ static inline u32 ib_inc_rkey(u32 rkey)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
+/* See also commit bcf4c1ea */
+struct ib_cq_init_attr {
+	unsigned int	cqe;
+	int		comp_vector;
+	u32		flags;
+};
+
+static inline struct ib_cq *ib_create_cq_compat(struct ib_device *device,
+			ib_comp_handler comp_handler,
+			void (*event_handler)(struct ib_event *, void *),
+			void *cq_context,
+			const struct ib_cq_init_attr *cq_attr)
+{
+	return ib_create_cq(device, comp_handler, event_handler, cq_context,
+			    cq_attr->cqe, cq_attr->comp_vector);
+}
+#define ib_create_cq ib_create_cq_compat
+#endif
+
 /* <rdma/rdma_cm.h> */
 /*
  * commit b26f9b9 (RDMA/cma: Pass QP type into rdma_create_id())

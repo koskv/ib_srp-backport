@@ -4107,7 +4107,7 @@ static ssize_t srp_create_target(struct device *dev,
 					target->mq_map[cpu] = first_cpu;
 #endif
 					target->ch_count = ch - target->ch;
-					break;
+					goto connected;
 				}
 			}
 
@@ -4117,6 +4117,7 @@ static ssize_t srp_create_target(struct device *dev,
 		node_idx++;
 	}
 
+connected:
 #ifdef HAVE_USE_BLK_TAGS
 	target->scsi_host->nr_hw_queues = target->ch_count;
 #else

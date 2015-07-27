@@ -4163,10 +4163,8 @@ err_disconnect:
 
 	for (i = 0; i < target->ch_count; i++) {
 		ch = &target->ch[i];
-		if (ch->target) {
-			srp_free_ch_ib(target, ch);
-			srp_free_req_data(target, ch);
-		}
+		srp_free_ch_ib(target, ch);
+		srp_free_req_data(target, ch);
 	}
 
 #ifndef HAVE_USE_BLK_TAGS

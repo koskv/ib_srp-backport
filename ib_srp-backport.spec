@@ -11,7 +11,7 @@
 	)}
 
 Name:		%{kmod_name}-%{kversion}
-Version:	2.0.33
+Version:	2.0.34
 Release:	1
 Summary:	%{kmod_name} kernel modules
 Group:		System/Kernel
@@ -23,7 +23,7 @@ Requires:	/sbin/depmod /usr/bin/find %{kernel_rpm}
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-build-%(%{__id_u} -n)
 
 %description
-Backport of the Linux IB/SRP 4.0 kernel module to earlier kernel versions.
+Backport of the Linux IB/SRP 4.2 kernel module to earlier kernel versions.
 
 %prep
 rm -rf $RPM_BUILD_ROOT
@@ -69,6 +69,9 @@ depmod %{kversion}
 /lib/modules/%{kversion}/extra/%{kmod_name}/*.ko
 
 %changelog
+* Mon Jul 27 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.34
+- Handle partial connection success correctly.
+- Bump driver version and release date.
 * Wed Jun 24 2015 Bart Van Assche <bart.vanassche@sandisk.com> - 2.0.33
 - rpmbuild: Suppress an rpmbuild warning.
 - Makefile: Leave out a superfluous regular expression.

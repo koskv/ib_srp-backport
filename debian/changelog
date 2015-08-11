@@ -1,5 +1,12 @@
+ib-srp-backport (2.0.34.1) unstable; urgency=low
+
+  * Add more logging
+
+ -- Konstantin Krotov <kkv@clodo.ru>  Thu, 11 Aug 2015 16:17:13 +0300
+
 ib-srp-backport (2.0.34) unstable; urgency=low
 
   * New upstream source v2.0.34
 
  -- Konstantin Krotov <kkv@clodo.ru>  Thu, 11 Aug 2015 11:39:31 +0300
+

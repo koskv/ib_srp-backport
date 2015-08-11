@@ -1069,7 +1069,7 @@ static void srp_disconnect_target(struct srp_target_port *target)
 		}
 		if (ret < 0) {
 			shost_printk(KERN_DEBUG, target->scsi_host,
-				     PFX "Sending CM DREQ failed ret is %s\n", ret);
+				     PFX "Sending CM DREQ failed\n");
 		}
 	}
 }

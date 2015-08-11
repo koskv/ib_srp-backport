@@ -1058,10 +1058,12 @@ static void srp_disconnect_target(struct srp_target_port *target)
 		if (target->using_rdma_cm) {
 			if (ch->rdma_cm.cm_id)
 				rdma_disconnect(ch->rdma_cm.cm_id);
+                                    PFX "Do rdma_disconnect\n";
 		} else {
 			if (ch->ib_cm.cm_id)
 				ret = ib_send_cm_dreq(ch->ib_cm.cm_id,
 						      NULL, 0);
+                                    PFX "Do ib_send_cm_dreq\n";
 		}
 		if (ret < 0) {
 			shost_printk(KERN_DEBUG, target->scsi_host,

@@ -1065,7 +1065,7 @@ static void srp_disconnect_target(struct srp_target_port *target)
 				ret = ib_send_cm_dreq(ch->ib_cm.cm_id,
 						      NULL, 0);
 			shost_printk(KERN_DEBUG, target->scsi_host,
-                                    PFX "Do ib_send_cm_dreq %s\n", ch->ib_cm.cm_id);
+                                    PFX "Do ib_send_cm_dreq\n");
 		}
 		if (ret < 0) {
 			shost_printk(KERN_DEBUG, target->scsi_host,

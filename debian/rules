@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-NAME=ib-srp-backport-2.0.34-dkms
+NAME=ib-srp-backport-dkms
 VERSION=2.0.34
 DEST_DIR = /usr/src/$(NAME)-$(VERSION)
 

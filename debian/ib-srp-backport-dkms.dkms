@@ -1,4 +1,4 @@
-PACKAGE_NAME="ib-srp-backport-2.0.34-dkms"
+PACKAGE_NAME="ib-srp-backport-dkms"
 PACKAGE_VERSION="2.0.34"
 CLEAN="make clean"
 MAKE="make"

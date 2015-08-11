@@ -1,11 +1,11 @@
-Source: ib-srp-backport-2.0.34
+Source: ib-srp-backport
 Section: kernel
 Priority: optional
 Maintainer: Gromak Yuriy <sewer@clodo.ru>
 Build-Depends: debhelper (>= 9), dkms, autoconf, automake
 
 
-Package: ib-srp-backport-2.0.34-dkms
+Package: ib-srp-backport-dkms
 Architecture: all
 Depends: dkms (>= 1.95)
 Section: misc

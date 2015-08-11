@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+NAME=ib-srp-backport-dkms
+VERSION=2.0.32
+DEST_DIR = /usr/src/$(NAME)-$(VERSION)
+
+%:
+	dh $@ --with dkms --with quilt
+
+override_dh_auto_build override_dh_auto_install override_dh_auto_clean:
+	@
+
+override_dh_install:
+	dh_install --exclude=.gitignore --exclude=debian/ --exclude=.git/ '*' $(DEST_DIR)
+

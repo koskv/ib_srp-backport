@@ -1,0 +1,25 @@
+#https://github.com/bvanassche/ib_srp-backport/issues/3
+diff --git a/Makefile b/Makefile
+index 107bf80..535b0a6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,17 +1,8 @@
+ #
+ # Makefile for scsi_transport_srp.ko and ib_srp.ko.
+ #
+-
+-ifeq ($(KVER),)
+-  ifeq ($(KDIR),)
+-    KVER = $(shell uname -r)
+-    KDIR ?= /lib/modules/$(KVER)/build
+-  else
+-    KVER = $$KERNELRELEASE
+-  endif
+-else
+-  KDIR ?= /lib/modules/$(KVER)/build
+-endif
++export KVER=$(KERNELRELEASE)
++export KDIR=/lib/modules/$(KERNELRELEASE)/build
+ 
+ VERSION := $(shell sed -n 's/Version:[[:blank:]]*//p' ib_srp-backport.spec)
+ 

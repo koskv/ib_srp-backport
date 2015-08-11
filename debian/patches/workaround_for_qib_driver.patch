@@ -1,0 +1,25 @@
+diff --git a/drivers/infiniband/ulp/srp/ib_srp.c b/drivers/infiniband/ulp/srp/ib_srp.c
+index c5af67a..470eb54 100644
+--- a/drivers/infiniband/ulp/srp/ib_srp.c
++++ b/drivers/infiniband/ulp/srp/ib_srp.c
+@@ -59,6 +59,7 @@
+ #include "../../../../include/scsi/scsi_transport_srp.h"
+ 
+ #include "ib_srp.h"
++#include <linux/delay.h>
+ 
+ #define DRV_NAME	"ib_srp"
+ #define PFX		DRV_NAME ": "
+@@ -621,11 +622,7 @@ static void srp_destroy_qp(struct srp_rdma_ch *ch)
+ 	if (ret)
+ 		goto out;
+ 
+-	init_completion(&ch->done);
+-	ret = ib_post_recv(ch->qp, &wr, &bad_wr);
+-	WARN_ONCE(ret, "ib_post_recv() returned %d\n", ret);
+-	if (ret == 0)
+-		wait_for_completion(&ch->done);
++	msleep(100);
+ 
+ out:
+ 	ib_destroy_qp(ch->qp);

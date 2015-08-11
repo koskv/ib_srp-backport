@@ -1,0 +1,22 @@
+diff --git a/drivers/infiniband/core/uverbs_cmd.c b/drivers/infiniband/core/uverbs_cmd.c
+index f9d0d7c..0934f3a 100644
+--- a/drivers/infiniband/core/uverbs_cmd.c
++++ b/drivers/infiniband/core/uverbs_cmd.c
+@@ -1855,13 +1855,14 @@ ssize_t ib_uverbs_modify_qp(struct ib_uverbs_file *file,
+ 		ret = ib_modify_qp(qp, attr, modify_qp_mask(qp->qp_type, cmd.attr_mask));
+ 	}
+ 
+-	put_qp_read(qp);
+-
+ 	if (ret)
+-		goto out;
++		goto release_qp;
+ 
+ 	ret = in_len;
+ 
++release_qp:
++	put_qp_read(qp);
++
+ out:
+ 	kfree(attr);
+ 

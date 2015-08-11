@@ -1,4 +1,3 @@
-deadlock.patch
 workaround_for_qib_driver.patch
 
 #https://github.com/bvanassche/ib_srp-backport/issues/3

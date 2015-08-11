@@ -1,29 +1,5 @@
-ib-srp-backport (2.0.34) unstable; urgency=low
+ib-srp-backport-2.0.34 (2.0.34) unstable; urgency=low
 
   * New upstream source v2.0.34
 
  -- Konstantin Krotov <kkv@clodo.ru>  Thu, 11 Aug 2015 11:39:31 +0300
-
-ib-srp-backport (2.0.32.3) unstable; urgency=low
-
-  * Add patch for multikernel dkms building
-
- -- Alexey Mochkin <alukardd@alukardd.org>  Thu, 16 Jul 2015 16:33:44 +0300
-
-ib-srp-backport (2.0.32.2) unstable; urgency=low
-
-  * Add some patches
-
- -- Alexey Mochkin <alukardd@alukardd.org>  Wed, 15 Jul 2015 11:12:02 +0300
-
-ib-srp-backport (2.0.32.1) unstable; urgency=low
-
-  * New upstream source v2.0.32
-
- -- Alexey Mochkin <alukardd@alukardd.org>  Mon, 13 Jul 2015 17:11:56 +0300
-
-ib-srp-backport (2.0.26) unstable; urgency=low
-
-  * Initial Release.
-
- -- sewer <sewer@clodo.ru>  Mon, 15 Sep 2014 16:16:00 +0400
